@@ -5,7 +5,10 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { useSubscription, Plan, PLAN_DETAILS } from '../../contexts/SubscriptionContext';
 import { Colors } from '../../constants/Colors';
+
+const PLANS: Plan[] = ['free', 'starter', 'pro', 'team'];
 
 export default function SignUpScreen() {
   const [name, setName] = useState('');
@@ -13,21 +16,26 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [team, setTeam] = useState('');
+  const [selectedPlan, setSelectedPlan] = useState<Plan>('free');
   const [loading, setLoading] = useState(false);
   const { signUp } = useAuth();
+  const { upgrade } = useSubscription();
   const router = useRouter();
 
   const handleSignUp = async () => {
     if (password !== confirm) {
-      Alert.alert('오류', '비밀번호가 일치하지 않습니다.');
+      Alert.alert('Error', 'Passwords do not match.');
       return;
     }
     setLoading(true);
     try {
       await signUp(email, password, name, team);
+      if (selectedPlan !== 'free') {
+        await upgrade(selectedPlan);
+      }
       router.replace('/(tabs)');
     } catch (e: any) {
-      Alert.alert('가입 실패', e.message || '다시 시도해주세요.');
+      Alert.alert('Sign Up Failed', e.message || 'Please try again.');
     } finally {
       setLoading(false);
     }
@@ -68,6 +76,46 @@ export default function SignUpScreen() {
             </View>
           ))}
 
+          {/* Plan Selector */}
+          <View style={styles.planSection}>
+            <Text style={styles.planTitle}>Choose Your Plan</Text>
+            <View style={styles.planGrid}>
+              {PLANS.map((p) => {
+                const details = PLAN_DETAILS[p];
+                const isSelected = selectedPlan === p;
+                return (
+                  <Pressable
+                    key={p}
+                    style={[styles.planCard, isSelected && styles.planCardSelected]}
+                    onPress={() => setSelectedPlan(p)}
+                  >
+                    <View style={styles.planCardHeader}>
+                      <Text style={[styles.planName, isSelected && styles.planNameSelected]}>
+                        {details.label}
+                      </Text>
+                      {p === 'pro' && (
+                        <View style={styles.popularBadge}>
+                          <Text style={styles.popularText}>Popular</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={[styles.planPrice, isSelected && styles.planPriceSelected]}>
+                      {details.price === 0 ? 'Free' : `$${details.price}/mo`}
+                    </Text>
+                    {details.features.slice(0, 2).map((f) => (
+                      <Text key={f} style={styles.planFeature}>· {f}</Text>
+                    ))}
+                    {isSelected && (
+                      <View style={styles.checkmark}>
+                        <Text style={styles.checkmarkText}>✓</Text>
+                      </View>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
           <Pressable
             style={({ pressed }) => [styles.btn, (pressed || loading) && { opacity: 0.8 }]}
             onPress={handleSignUp}
@@ -103,6 +151,47 @@ const styles = StyleSheet.create({
     color: Colors.text, fontSize: 15,
     borderWidth: 1, borderColor: Colors.border,
   },
+  planSection: { marginTop: 8, gap: 12 },
+  planTitle: { fontSize: 16, fontWeight: '700', color: Colors.text },
+  planGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  planCard: {
+    width: '47%',
+    backgroundColor: Colors.card,
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    gap: 4,
+    position: 'relative',
+  },
+  planCardSelected: {
+    borderColor: Colors.accent,
+    backgroundColor: '#001A22',
+  },
+  planCardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 2,
+  },
+  planName: { fontSize: 15, fontWeight: '700', color: Colors.subtext },
+  planNameSelected: { color: Colors.accent },
+  planPrice: { fontSize: 18, fontWeight: '800', color: Colors.text },
+  planPriceSelected: { color: Colors.accent },
+  planFeature: { fontSize: 11, color: Colors.subtext, lineHeight: 16 },
+  popularBadge: {
+    backgroundColor: Colors.accent,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  popularText: { fontSize: 9, fontWeight: '800', color: Colors.bg },
+  checkmark: {
+    position: 'absolute',
+    top: 8,
+    right: 10,
+  },
+  checkmarkText: { fontSize: 14, color: Colors.accent, fontWeight: '800' },
   btn: {
     height: 52, borderRadius: 12, marginTop: 8,
     backgroundColor: Colors.accent,
