@@ -358,7 +358,7 @@ export default function LessonDetailScreen() {
                 width={SCREEN_W}
                 videoId={lesson.videoId!}
                 play={playing}
-                onChangeState={(state) => {
+                onChangeState={(state: string) => {
                   if (state === 'playing') setPlaying(true);
                   if (state === 'paused' || state === 'ended') setPlaying(false);
                 }}
