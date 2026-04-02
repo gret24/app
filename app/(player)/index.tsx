@@ -5,6 +5,8 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/Colors';
+import { useRoster } from '../../contexts/RosterContext';
+import PlayerForm from '../../components/PlayerForm';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -60,6 +62,8 @@ const fmtTime = (sec: number) => {
 
 export default function PlayerAnalysisScreen() {
   const router = useRouter();
+  const { players: rosterPlayers, addPlayer } = useRoster();
+  const [showForm, setShowForm] = useState(false);
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [selectedVideo, setSelectedVideo] = useState<typeof MOCK_VIDEOS[0] | null>(null);
   const [teamFilter, setTeamFilter] = useState<TeamFilter>('ALL');
@@ -113,6 +117,12 @@ export default function PlayerAnalysisScreen() {
   };
 
   return (
+    <>
+    <PlayerForm
+      visible={showForm}
+      onClose={() => setShowForm(false)}
+      onSave={(p) => { addPlayer(p); setShowForm(false); }}
+    />
     <ScrollView style={styles.root} contentContainerStyle={styles.container}>
       {/* 헤더 */}
       <View style={styles.header}>
@@ -204,10 +214,44 @@ export default function PlayerAnalysisScreen() {
       {/* STEP 3: 선수 선택 */}
       {step === 3 && (
         <View style={styles.section}>
-          <Text style={styles.sectionLabel}>
-            {selectedVideo?.label} · {teamFilter === 'ALL' ? '전체' : teamFilter}
-          </Text>
-          <Text style={styles.stepTitle}>선수 선택</Text>
+          <View style={styles.sectionHeaderRow}>
+            <View>
+              <Text style={styles.sectionLabel}>
+                {selectedVideo?.label} · {teamFilter === 'ALL' ? '전체' : teamFilter}
+              </Text>
+              <Text style={styles.stepTitle}>선수 선택</Text>
+            </View>
+            <Pressable style={styles.addBtn} onPress={() => setShowForm(true)}>
+              <Text style={styles.addBtnText}>+ 선수 등록</Text>
+            </Pressable>
+          </View>
+
+          {/* 로스터 등록 선수 미리보기 */}
+          {rosterPlayers.length > 0 && (
+            <View style={styles.rosterPreview}>
+              <Text style={styles.rosterLabel}>📋 등록된 선수 ({rosterPlayers.length}명)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {rosterPlayers.filter(p => teamFilter === 'ALL' || p.team === teamFilter).map(p => (
+                  <Pressable
+                    key={p.id}
+                    style={styles.rosterChip}
+                    onPress={() => {
+                      setSelectedPlayer({
+                        jersey: p.jersey, team: p.team,
+                        total_ice_time_min: 0, total_shifts: 0, total_ice_time_sec: 0,
+                      });
+                      setStep(4);
+                    }}
+                  >
+                    <Text style={styles.rosterChipNum}>#{p.jersey}</Text>
+                    <Text style={styles.rosterChipName}>{p.name}</Text>
+                    <Text style={styles.rosterChipPos}>{p.position}</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          )}
+
           <View style={styles.playerList}>
             {filteredPlayers
               .sort((a, b) => b.total_ice_time_min - a.total_ice_time_min)
@@ -330,6 +374,7 @@ export default function PlayerAnalysisScreen() {
 
       <View style={{ height: 40 }} />
     </ScrollView>
+    </>
   );
 }
 
@@ -401,4 +446,13 @@ const styles = StyleSheet.create({
   shiftTime: { fontSize: 13, fontWeight: '600', color: Colors.text },
   shiftDur: { fontSize: 11, color: Colors.subtext },
   shiftBar: { height: 4, borderRadius: 2, backgroundColor: Colors.accent, opacity: 0.5 },
+  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 },
+  addBtn: { backgroundColor: Colors.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
+  addBtnText: { color: Colors.bg, fontSize: 13, fontWeight: '700' },
+  rosterPreview: { backgroundColor: Colors.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: Colors.border, marginBottom: 16 },
+  rosterLabel: { fontSize: 12, color: Colors.subtext, fontWeight: '600', marginBottom: 8 },
+  rosterChip: { backgroundColor: Colors.input, borderRadius: 10, padding: 10, marginRight: 8, alignItems: 'center', minWidth: 72, borderWidth: 1, borderColor: Colors.border },
+  rosterChipNum: { fontSize: 16, fontWeight: '800', color: Colors.accent },
+  rosterChipName: { fontSize: 10, color: Colors.text, marginTop: 2 },
+  rosterChipPos: { fontSize: 10, color: Colors.subtext },
 });

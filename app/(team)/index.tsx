@@ -5,6 +5,8 @@ import {
 import { useRouter } from 'expo-router';
 import Svg, { Rect, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { Colors } from '../../constants/Colors';
+import { useRoster } from '../../contexts/RosterContext';
+import PlayerForm from '../../components/PlayerForm';
 
 type TeamSide = 'HOME' | 'AWAY';
 type TeamMenu = 'tactics' | 'recommendation' | 'players';
@@ -109,6 +111,8 @@ function MiniRink({ homeO, homeN, homeD }: { homeO: number; homeN: number; homeD
 
 export default function TeamScreen() {
   const router = useRouter();
+  const { players: rosterPlayers, addPlayer } = useRoster();
+  const [showForm, setShowForm] = useState(false);
   const [selectedVideo, setSelectedVideo] = useState<typeof MOCK_VIDEOS[0] | null>(null);
   const [selectedTeam, setSelectedTeam] = useState<TeamSide>('HOME');
   const [activeMenu, setActiveMenu] = useState<TeamMenu>('tactics');
@@ -133,6 +137,8 @@ export default function TeamScreen() {
   ];
 
   return (
+    <>
+    <PlayerForm visible={showForm} onClose={() => setShowForm(false)} onSave={(p) => { addPlayer(p); setShowForm(false); }} />
     <ScrollView style={styles.root} contentContainerStyle={styles.container}>
       {/* 헤더 */}
       <View style={styles.header}>
@@ -379,11 +385,17 @@ export default function TeamScreen() {
           <Pressable style={styles.changeBtn} onPress={() => { setStep(1); setSelectedVideo(null); }}>
             <Text style={styles.changeBtnText}>다른 경기 선택</Text>
           </Pressable>
+
+          {/* 선수 등록 버튼 */}
+          <Pressable style={[styles.changeBtn, { borderColor: Colors.accent, marginTop: 8 }]} onPress={() => setShowForm(true)}>
+            <Text style={{ color: Colors.accent, fontSize: 14, fontWeight: '700' }}>+ 선수 등록</Text>
+          </Pressable>
         </>
       )}
 
       <View style={{ height: 40 }} />
     </ScrollView>
+    </>
   );
 }
 
