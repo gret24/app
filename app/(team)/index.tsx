@@ -7,6 +7,7 @@ import Svg, { Rect, Circle, Line, Text as SvgText } from 'react-native-svg';
 import { Colors } from '../../constants/Colors';
 import { useRoster } from '../../contexts/RosterContext';
 import PlayerForm from '../../components/PlayerForm';
+import TacticsDiagram from '../../components/TacticsDiagram';
 
 type TeamSide = 'HOME' | 'AWAY';
 type TeamMenu = 'tactics' | 'recommendation' | 'players';
@@ -284,6 +285,8 @@ export default function TeamScreen() {
                   </View>
                 ))}
               </View>
+              <Text style={styles.sectionLabel}>전술 다이어그램</Text>
+              <TacticsDiagram team={selectedTeam} autoPlay={true} />
             </View>
           )}
 
