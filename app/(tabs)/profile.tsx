@@ -183,6 +183,25 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* DEV 플랜 토글 (개발 모드) */}
+        {__DEV__ && !isAdmin && (
+          <View style={{ backgroundColor: '#FF000011', borderRadius: 12, padding: 12, borderWidth: 1, borderColor: '#FF000033' }}>
+            <Text style={{ fontSize: 11, color: '#FF6644', fontWeight: '700', marginBottom: 8 }}>🛠 DEV: 플랜 변경</Text>
+            <View style={{ flexDirection: 'row', gap: 6 }}>
+              {(['free','starter','pro','team'] as Plan[]).map(pl => (
+                <Pressable key={pl} style={{
+                  flex: 1, height: 32, borderRadius: 8, borderWidth: 1,
+                  borderColor: plan === pl ? '#00D4FF' : '#333',
+                  backgroundColor: plan === pl ? '#00D4FF22' : 'transparent',
+                  justifyContent: 'center', alignItems: 'center',
+                }} onPress={() => upgrade(pl)}>
+                  <Text style={{ fontSize: 10, color: plan === pl ? '#00D4FF' : '#888', fontWeight: '700' }}>{pl.toUpperCase()}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        )}
+
         {/* 관리자 버튼 */}
         {isAdmin && (
           <Pressable

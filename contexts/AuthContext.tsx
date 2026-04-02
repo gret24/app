@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Platform } from 'react-native';
-import { registerUser } from '../lib/userService';
+import { createUserProfile } from '../api/userService';
 import {
   auth,
   signInWithEmailAndPassword,
@@ -35,13 +35,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Firebase Auth 상태 변화 감지
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser({
           uid: firebaseUser.uid,
           email: firebaseUser.email,
           displayName: firebaseUser.displayName,
         });
+        // 로그인 시 Firestore lastLoginAt 업데이트
+        try { await createUserProfile(firebaseUser.uid, firebaseUser.email ?? '', firebaseUser.displayName ?? ''); } catch (_) {}
       } else {
         setUser(null);
       }
@@ -59,8 +61,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!email || !password || !name) throw new Error('필수 항목을 입력해주세요');
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName: name });
-    // Firestore에 사용자 등록
-    try { await registerUser(cred.user.uid, email, name); } catch (_) {}
+    // Firestore에 사용자 프로필 생성
+    try { await createUserProfile(cred.user.uid, email, name); } catch (_) {}
   };
 
   const signOut = async () => {

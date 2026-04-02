@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  TextInput, Alert, ActivityIndicator, Animated, Image, FlatList,
+  TextInput, Alert, ActivityIndicator, Animated, Image, FlatList, Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSubscription } from '../../contexts/SubscriptionContext';
@@ -36,8 +36,9 @@ type Step = 'input' | 'analyzing' | 'result';
 
 export default function VideoLessonsScreen() {
   const router = useRouter();
-  const { plan } = useSubscription();
-  const isPro = plan === 'pro' || plan === 'team';
+  const { plan, isPro, checkLimit, recordGame } = useSubscription();
+  const [showLimitModal, setShowLimitModal] = useState(false);
+  const [limitInfo, setLimitInfo] = useState({ used: 0, limit: 0 });
   const [mainTab, setMainTab] = useState<'library' | 'analyze'>('library');
   const [step, setStep]               = useState<Step>('input');
   const [url, setUrl]                 = useState('');
@@ -55,6 +56,17 @@ export default function VideoLessonsScreen() {
       toValue: to, duration: 400, useNativeDriver: false,
     }).start();
     setProgress(to);
+  };
+
+  // 경기 제한 체크 후 분석 시작
+  const startWithLimitCheck = async () => {
+    const { allowed, used, limit } = await checkLimit();
+    if (!allowed) {
+      setLimitInfo({ used, limit });
+      setShowLimitModal(true);
+      return;
+    }
+    startAnalysis();
   };
 
   // 갤러리에서 영상 선택
@@ -105,6 +117,7 @@ export default function VideoLessonsScreen() {
       }).then(async () => {
         animateProgress(100);
         setProgressMsg('완료!');
+        await recordGame(); // 분석 횟수 증가
         await loadResults(video_stem);
       }).catch(() => loadMockResults());
 
@@ -197,8 +210,35 @@ export default function VideoLessonsScreen() {
 
   // ── STEP 1: 입력 ──────────────────────────────────────────
   // Pro 잠금 화면
+  // 경기 제한 모달
+  const LimitModal = () => (
+    <Modal visible={showLimitModal} transparent animationType="fade">
+      <View style={{ flex:1, backgroundColor:'#000000CC', justifyContent:'center', alignItems:'center', padding:24 }}>
+        <View style={{ backgroundColor: Colors.card, borderRadius:20, padding:24, width:'100%', gap:14 }}>
+          <Text style={{ fontSize:36, textAlign:'center' }}>⛔</Text>
+          <Text style={{ fontSize:18, fontWeight:'800', color:Colors.text, textAlign:'center' }}>이번 달 제한 초과</Text>
+          <Text style={{ fontSize:14, color:Colors.subtext, textAlign:'center', lineHeight:22 }}>
+            {`이번 달 무료 분석 ${limitInfo.limit}회를 모두 사용했어요.\nStarter 플랜으로 업그레이드하면 월 8경기까지 분석할 수 있어요.`}
+          </Text>
+          <View style={{ backgroundColor:Colors.input, borderRadius:12, padding:14, gap:4 }}>
+            <Text style={{ fontSize:12, color:Colors.subtext }}>현재 사용량</Text>
+            <Text style={{ fontSize:20, fontWeight:'800', color:Colors.accent }}>{limitInfo.used} / {limitInfo.limit}회</Text>
+          </View>
+          <Pressable style={{ height:48, borderRadius:12, backgroundColor:Colors.accent, justifyContent:'center', alignItems:'center' }}
+            onPress={() => setShowLimitModal(false)}>
+            <Text style={{ color:Colors.bg, fontWeight:'700', fontSize:15 }}>업그레이드 알아보기</Text>
+          </Pressable>
+          <Pressable onPress={() => setShowLimitModal(false)} style={{ alignSelf:'center' }}>
+            <Text style={{ color:Colors.subtext, fontSize:13 }}>나중에</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+
   if (!isPro) return (
     <View style={[s.root, { justifyContent: 'center', alignItems: 'center', padding: 32 }]}>
+      <LimitModal />
       <Text style={{ fontSize: 56, marginBottom: 16 }}>🔒</Text>
       <Text style={{ fontSize: 22, fontWeight: '800', color: Colors.text, marginBottom: 10 }}>Pro 이상 전용</Text>
       <Text style={{ fontSize: 14, color: Colors.subtext, textAlign: 'center', lineHeight: 22, marginBottom: 28 }}>
@@ -309,7 +349,7 @@ export default function VideoLessonsScreen() {
         ))}
       </View>
 
-      <Pressable style={s.analyzeBtn} onPress={startAnalysis}>
+      <Pressable style={s.analyzeBtn} onPress={startWithLimitCheck}>
         <Text style={s.analyzeBtnText}>🔍 분석 시작</Text>
       </Pressable>
         </View>
