@@ -51,6 +51,9 @@ export default function PlayerAnalysisScreen() {
   // 분석 흐름
   const [step, setStep] = useState<AppStep>('input');
   const [url, setUrl] = useState('');
+  const [homeRoster, setHomeRoster] = useState(''); // "4,14,47,94"
+  const [awayRoster, setAwayRoster] = useState('');
+  const [showRoster, setShowRoster] = useState(false);
   const [videoStem, setVideoStem] = useState('');
   const [videoPath, setVideoPath] = useState(''); // 업로드된 영상 경로
   const [progress, setProgress] = useState(0);
@@ -127,7 +130,7 @@ export default function PlayerAnalysisScreen() {
         setProgressMsg('영상 업로드 중...');
         animateProgress(10);
         const filename = input.split('/').pop() || 'video.mp4';
-        const res = await uploadAndAnalyze(input, filename, { fps: 4 });
+        const res = await uploadAndAnalyze(input, filename, { fps: 4, home_roster: homeRoster, away_roster: awayRoster });
         job_id = res.job_id; stem = res.video_stem;
         vpath = input;
       } else {
@@ -269,6 +272,37 @@ export default function PlayerAnalysisScreen() {
             <Text style={s.fileBtnText}>📁 갤러리에서 영상 선택</Text>
           </Pressable>
         </View>
+
+        {/* 로스터 입력 (선택) */}
+        <Pressable style={s.rosterToggle} onPress={() => setShowRoster(v => !v)}>
+          <Text style={s.rosterToggleText}>📋 홈/어웨이 번호 입력 (선택)</Text>
+          <Text style={s.rosterToggleIcon}>{showRoster ? '▲' : '▼'}</Text>
+        </Pressable>
+        {showRoster && (
+          <View style={s.rosterCard}>
+            <Text style={s.rosterLabel}>🏠 홈팀 번호</Text>
+            <TextInput
+              style={s.rosterInput}
+              value={homeRoster}
+              onChangeText={setHomeRoster}
+              placeholder="예: 2, 4, 14, 26, 47, 94"
+              placeholderTextColor={Colors.subtext}
+              keyboardType="numbers-and-punctuation"
+            />
+            <Text style={[s.rosterLabel, { marginTop: 10 }]}>✈️ 어웨이팀 번호</Text>
+            <TextInput
+              style={s.rosterInput}
+              value={awayRoster}
+              onChangeText={setAwayRoster}
+              placeholder="예: 3, 8, 11, 19, 33, 77"
+              placeholderTextColor={Colors.subtext}
+              keyboardType="numbers-and-punctuation"
+            />
+            <Text style={s.rosterHint}>
+              * 번호를 미리 등록하면 4→47 분리인식 자동 보정으로 정확도가 높아져요
+            </Text>
+          </View>
+        )}
 
         <View style={s.howCard}>
           {[
@@ -575,6 +609,13 @@ const s = StyleSheet.create({
   shiftTime: { fontSize: 13, fontWeight: '600', color: Colors.text },
   shiftDur: { fontSize: 11, color: Colors.subtext },
   shiftBar: { height: 4, borderRadius: 2, backgroundColor: Colors.accent, opacity: 0.5 },
+  rosterToggle: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: Colors.card, borderRadius: 10, padding: 14, borderWidth: 1, borderColor: Colors.border, marginBottom: 8 },
+  rosterToggleText: { fontSize: 14, fontWeight: '600', color: Colors.subtext },
+  rosterToggleIcon: { fontSize: 12, color: Colors.subtext },
+  rosterCard: { backgroundColor: Colors.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: Colors.accent + '44', marginBottom: 12 },
+  rosterLabel: { fontSize: 12, fontWeight: '700', color: Colors.accent, marginBottom: 6, letterSpacing: 0.5 },
+  rosterInput: { height: 44, backgroundColor: Colors.input, borderRadius: 10, paddingHorizontal: 12, color: Colors.text, fontSize: 14, borderWidth: 1, borderColor: Colors.border },
+  rosterHint: { fontSize: 11, color: Colors.subtext, marginTop: 10, lineHeight: 16 },
   sectionHeader: { fontSize: 14, fontWeight: '700', color: Colors.subtext, marginBottom: 10, letterSpacing: 0.5 },
   gameCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: Colors.border },
   gameCardLeft: { flex: 1 },
