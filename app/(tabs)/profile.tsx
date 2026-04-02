@@ -191,18 +191,18 @@ export default function ProfileScreen() {
           <Pressable style={p.upgradeBtn} onPress={() => setShowUpgrade(true)}>
             <Text style={p.upgradeBtnText}>⬆ Upgrade Plan</Text>
           </Pressable>
-          {/* 구독 중이면 관리 버튼 */}
-          {plan !== 'free' && (
-            <Pressable
-              style={[p.upgradeBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: Colors.border }]}
-              onPress={handleManageSubscription}
-              disabled={portalLoading}
-            >
-              {portalLoading
-                ? <ActivityIndicator color={Colors.accent} />
-                : <Text style={[p.upgradeBtnText, { color: Colors.subtext }]}>⚙️ Manage Subscription</Text>}
-            </Pressable>
-          )}
+        )}
+        {/* 구독 중이면 관리 버튼 */}
+        {plan !== 'free' && (
+          <Pressable
+            style={[p.upgradeBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: Colors.border }]}
+            onPress={handleManageSubscription}
+            disabled={portalLoading}
+          >
+            {portalLoading
+              ? <ActivityIndicator color={Colors.accent} />
+              : <Text style={[p.upgradeBtnText, { color: Colors.subtext }]}>⚙️ Manage Subscription</Text>}
+          </Pressable>
         )}
 
         {/* Settings rows */}
