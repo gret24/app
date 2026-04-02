@@ -21,7 +21,9 @@ const DIFF_COLOR: Record<string, string> = {
   Beginner: '#00CC66', Intermediate: '#FFD700', Advanced: '#FF6644',
 };
 
-const API_BASE = 'http://localhost:8000'; // RunPod server_v2.py
+import { uploadAndAnalyze, waitForAnalysis, getPlayers, getReport } from '../../api/analysisService';
+import { generateHighlight } from '../../api/highlightService';
+import * as ImagePicker from 'expo-image-picker';
 
 interface AnalysisResult {
   job_id: string;
@@ -55,59 +57,58 @@ export default function VideoLessonsScreen() {
     setProgress(to);
   };
 
-  // 분석 시작
+  // 갤러리에서 영상 선택
+  const pickVideo = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('권한 필요', '갤러리 접근 권한이 필요해요'); return; }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
+      quality: 1,
+    });
+    if (!res.canceled && res.assets[0]) {
+      setUrl(res.assets[0].uri);
+    }
+  };
+
+  // 분석 시작 (실제 API + mock 폴백)
   const startAnalysis = async () => {
     const input = url.trim();
-    if (!input) { Alert.alert('오류', 'YouTube URL 또는 영상 경로를 입력해주세요'); return; }
+    if (!input) { Alert.alert('오류', '영상 경로 또는 URL을 입력해주세요'); return; }
 
     setStep('analyzing');
     animateProgress(5);
-    setProgressMsg('영상 분석 요청 중...');
+    setProgressMsg('업로드 중...');
 
     try {
-      // RunPod API 호출
-      const res = await fetch(`${API_BASE}/analyze`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ video_path: input, fps: 4 }),
-      });
+      // 파일 URI면 업로드, 아니면 경로 기반 분석
+      let job_id: string, video_stem: string;
+      if (input.startsWith('file://') || input.startsWith('/')) {
+        setProgressMsg('서버에 업로드 중...');
+        animateProgress(10);
+        const filename = input.split('/').pop() || 'video.mp4';
+        const res = await uploadAndAnalyze(input, filename, { fps: 4 });
+        job_id = res.job_id; video_stem = res.video_stem;
+      } else {
+        // 경로 기반 (서버에 이미 있는 영상)
+        const { apiPost } = await import('../../api/client');
+        const res = await apiPost<any>('/analyze', { video_path: input, fps: 4 });
+        job_id = res.job_id; video_stem = res.video_stem;
+      }
 
-      if (!res.ok) throw new Error('분석 요청 실패');
-      const { job_id, video_stem } = await res.json();
-
-      setProgressMsg('프레임 추출 중...');
-      animateProgress(15);
+      setProgressMsg('AI 분석 중...');
+      animateProgress(20);
 
       // 폴링으로 진행 상황 확인
-      pollRef.current = setInterval(async () => {
-        try {
-          const statusRes = await fetch(`${API_BASE}/status/${job_id}`);
-          const status = await statusRes.json();
-
-          if (status.status === 'running') {
-            const msg = status.message || '분석 중...';
-            setProgressMsg(msg);
-            if (msg.includes('ByteTrack')) animateProgress(30);
-            else if (msg.includes('OCR')) animateProgress(60);
-            else if (msg.includes('완료')) animateProgress(90);
-          } else if (status.status === 'done') {
-            clearInterval(pollRef.current!);
-            animateProgress(100);
-            setProgressMsg('분석 완료!');
-            await loadResults(video_stem);
-          } else if (status.status === 'error') {
-            clearInterval(pollRef.current!);
-            throw new Error(status.message);
-          }
-        } catch (e) {
-          // 네트워크 오류 시 mock 데이터로 대체
-          clearInterval(pollRef.current!);
-          await loadMockResults();
-        }
-      }, 2000);
+      waitForAnalysis(job_id, (status) => {
+        setProgressMsg(status.message);
+        animateProgress(Math.max(20, Math.min(95, status.progress)));
+      }).then(async () => {
+        animateProgress(100);
+        setProgressMsg('완료!');
+        await loadResults(video_stem);
+      }).catch(() => loadMockResults());
 
     } catch {
-      // API 연결 실패 → mock 데이터 데모
       simulateMockAnalysis();
     }
   };
@@ -135,12 +136,16 @@ export default function VideoLessonsScreen() {
 
   const loadResults = async (video_stem: string) => {
     try {
-      const r = await fetch(`${API_BASE}/report/${video_stem}`);
-      const data = await r.json();
+      const data = await getReport(video_stem);
       setResult({
         job_id: '',
         video_stem,
-        players: data.players?.slice(0, 8) ?? [],
+        players: (data.players ?? []).slice(0, 12).map(p => ({
+          jersey: p.jersey,
+          team: p.team,
+          total_ice_time_min: p.total_ice_time_min,
+          total_shifts: p.total_shifts,
+        })),
       });
       setStep('result');
     } catch {
@@ -283,8 +288,8 @@ export default function VideoLessonsScreen() {
           autoCorrect={false}
         />
         <Text style={s.orText}>— 또는 —</Text>
-        <Pressable style={s.fileBtn}>
-          <Text style={s.fileBtnText}>📁 파일 선택 (mp4)</Text>
+        <Pressable style={s.fileBtn} onPress={pickVideo}>
+          <Text style={s.fileBtnText}>📁 갤러리에서 선택</Text>
         </Pressable>
       </View>
 

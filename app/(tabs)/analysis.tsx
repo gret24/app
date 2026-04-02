@@ -4,7 +4,7 @@ import {
   FlatList, Dimensions, ActivityIndicator,
 } from 'react-native';
 
-const API_BASE_URL = 'http://localhost:8000';
+import { getPlayers as apiGetPlayers, getReport as apiGetReport } from '../../api/analysisService';
 import Svg, {
   Rect, Line, Circle, G, RadialGradient, Defs, Stop, Ellipse, Text as SvgText,
 } from 'react-native-svg';
@@ -358,15 +358,17 @@ export default function AnalysisScreen() {
   useEffect(() => {
     const fetchPlayers = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/players/${video_stem}`);
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const data = await response.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setPlayers(data);
-          setSelectedPlayer(data[0]);
+        const data = await apiGetPlayers(video_stem);
+        if (data.players && data.players.length > 0) {
+          const mapped = data.players.map((p: any) => ({
+            id: p.jersey, name: `#${p.jersey}`, number: p.jersey,
+            team: Object.keys(p.teams ?? {})[0] ?? 'HOME',
+            position: 'F' as any,
+          }));
+          setPlayers(mapped);
+          setSelectedPlayer(mapped[0]);
         }
       } catch {
-        // Network error or non-2xx — fall back to mock data silently
         setPlayers(MOCK_PLAYERS);
         setSelectedPlayer(MOCK_PLAYERS[0]);
       } finally {
