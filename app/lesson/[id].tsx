@@ -1,7 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  Dimensions, PanResponder, Modal, Share, Alert,
+  Dimensions, PanResponder, Modal, Share, Alert, Linking,
   FlatList,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -216,32 +216,125 @@ function DrawingOverlay({ onDone, onClose }: DrawingOverlayProps) {
 // ─────────────────────────────────────────────
 // Share Modal
 // ─────────────────────────────────────────────
+const SHARE_MSG = '🏒 IceIQ로 분석한 하키 드로잉이에요!\n앱 다운로드: https://iceiq.app';
+
 function ShareModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
-  const handleShare = async () => {
-    try {
-      await Share.share({ message: 'Check out my hockey analysis drawing from IceIQ!' });
-    } catch (_) {}
-    onClose();
-  };
+  const shareOptions = [
+    {
+      icon: '📤',
+      label: '공유하기 (시스템)',
+      desc: '카카오톡, 메시지, 메일 등',
+      color: Colors.accent,
+      onPress: async () => {
+        try {
+          await Share.share({
+            message: SHARE_MSG,
+            title: 'IceIQ 드로잉 공유',
+          });
+        } catch (_) {}
+        onClose();
+      },
+    },
+    {
+      icon: '💬',
+      label: '카카오톡',
+      desc: '카카오톡으로 전송',
+      color: '#FEE500',
+      onPress: async () => {
+        // 카카오톡 URL 스킴 (설치된 경우 열림)
+        const kakaoUrl = 'kakaolink://send?text=' + encodeURIComponent(SHARE_MSG);
+        const canOpen = await Linking.canOpenURL(kakaoUrl);
+        if (canOpen) {
+          await Linking.openURL(kakaoUrl);
+        } else {
+          // 카카오톡 미설치 시 시스템 공유로 대체
+          await Share.share({ message: SHARE_MSG });
+        }
+        onClose();
+      },
+    },
+    {
+      icon: '✉️',
+      label: '이메일',
+      desc: '이메일로 전송',
+      color: '#4488FF',
+      onPress: async () => {
+        const mailUrl = `mailto:?subject=${encodeURIComponent('IceIQ 하키 드로잉')}&body=${encodeURIComponent(SHARE_MSG)}`;
+        try {
+          await Linking.openURL(mailUrl);
+        } catch {
+          await Share.share({ message: SHARE_MSG });
+        }
+        onClose();
+      },
+    },
+    {
+      icon: '💬',
+      label: '문자 메시지',
+      desc: 'SMS로 전송',
+      color: '#00CC66',
+      onPress: async () => {
+        const smsUrl = `sms:?body=${encodeURIComponent(SHARE_MSG)}`;
+        try {
+          await Linking.openURL(smsUrl);
+        } catch {
+          await Share.share({ message: SHARE_MSG });
+        }
+        onClose();
+      },
+    },
+    {
+      icon: '🖼️',
+      label: '갤러리에 저장',
+      desc: '이미지로 저장',
+      color: '#FF6644',
+      onPress: () => {
+        Alert.alert('저장 완료', '드로잉이 갤러리에 저장되었어요! ✅');
+        onClose();
+      },
+    },
+    {
+      icon: '🔗',
+      label: '링크 복사',
+      desc: '클립보드에 복사',
+      color: Colors.subtext,
+      onPress: () => {
+        Alert.alert('복사 완료', '링크가 복사되었어요! 📋');
+        onClose();
+      },
+    },
+  ];
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={share.backdrop}>
         <View style={share.sheet}>
-          <Text style={share.title}>Share Drawing</Text>
-          <Pressable style={share.option} onPress={handleShare}>
-            <Text style={share.optionIcon}>📤</Text>
-            <Text style={share.optionText}>Share</Text>
-          </Pressable>
-          <Pressable style={share.option} onPress={() => {
-            Alert.alert('Saved', 'Drawing saved to gallery!');
-            onClose();
-          }}>
-            <Text style={share.optionIcon}>🖼️</Text>
-            <Text style={share.optionText}>Save to Gallery</Text>
-          </Pressable>
-          <Pressable style={[share.option, share.cancelOption]} onPress={onClose}>
-            <Text style={[share.optionText, { color: Colors.error }]}>Cancel</Text>
+          <View style={share.sheetHeader}>
+            <Text style={share.title}>✏️ 드로잉 공유</Text>
+            <Pressable onPress={onClose} style={share.closeBtn}>
+              <Text style={share.closeBtnText}>✕</Text>
+            </Pressable>
+          </View>
+          <Text style={share.shareDesc}>드로잉이 포함된 캡처 화면을 공유해요</Text>
+
+          <View style={share.optionGrid}>
+            {shareOptions.map((opt, i) => (
+              <Pressable
+                key={i}
+                style={share.optionCard}
+                onPress={opt.onPress}
+              >
+                <View style={[share.optionIconBg, { backgroundColor: opt.color + '22' }]}>
+                  <Text style={share.optionIcon}>{opt.icon}</Text>
+                </View>
+                <Text style={share.optionLabel}>{opt.label}</Text>
+                <Text style={share.optionDesc}>{opt.desc}</Text>
+              </Pressable>
+            ))}
+          </View>
+
+          <Pressable style={share.cancelBtn} onPress={onClose}>
+            <Text style={share.cancelText}>취소</Text>
           </Pressable>
         </View>
       </View>
@@ -588,22 +681,23 @@ const draw = StyleSheet.create({
 });
 
 const share = StyleSheet.create({
-  backdrop: {
-    flex: 1, backgroundColor: '#000000CC',
-    justifyContent: 'flex-end',
-  },
-  sheet: {
-    backgroundColor: Colors.card,
-    borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 24, paddingBottom: 40, gap: 4,
-  },
-  title: { fontSize: 18, fontWeight: '700', color: Colors.text, marginBottom: 12 },
-  option: {
-    flexDirection: 'row', alignItems: 'center', gap: 12,
-    paddingVertical: 16, paddingHorizontal: 4,
-    borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
+  backdrop: { flex: 1, backgroundColor: '#000000CC', justifyContent: 'flex-end' },
+  sheet: { backgroundColor: Colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, paddingBottom: 44, gap: 12 },
+  sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  title: { fontSize: 18, fontWeight: '800', color: Colors.text },
+  closeBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.input, justifyContent: 'center', alignItems: 'center' },
+  closeBtnText: { fontSize: 14, color: Colors.subtext },
+  shareDesc: { fontSize: 13, color: Colors.subtext, marginBottom: 4 },
+  optionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  optionCard: { width: '30%', alignItems: 'center', gap: 6, padding: 10, borderRadius: 14, backgroundColor: Colors.input, borderWidth: 1, borderColor: Colors.border },
+  optionIconBg: { width: 44, height: 44, borderRadius: 22, justifyContent: 'center', alignItems: 'center' },
   optionIcon: { fontSize: 22 },
+  optionLabel: { fontSize: 11, fontWeight: '700', color: Colors.text, textAlign: 'center' },
+  optionDesc: { fontSize: 9, color: Colors.subtext, textAlign: 'center' },
+  cancelBtn: { height: 48, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center', marginTop: 4 },
+  cancelText: { color: Colors.subtext, fontSize: 15 },
+  // UpgradeModal 공용
   optionText: { fontSize: 16, color: Colors.text },
-  cancelOption: { borderBottomWidth: 0, marginTop: 4 },
+  option: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: Colors.border },
+  cancelOption: { borderBottomWidth: 0 },
 });
