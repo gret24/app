@@ -4,6 +4,7 @@ import {
   TextInput, Alert, ActivityIndicator, Animated, Image, FlatList,
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useSubscription } from '../../contexts/SubscriptionContext';
 import { Colors } from '../../constants/Colors';
 import IceTimeDiagram from '../../components/IceTimeDiagram';
 
@@ -33,6 +34,8 @@ type Step = 'input' | 'analyzing' | 'result';
 
 export default function VideoLessonsScreen() {
   const router = useRouter();
+  const { plan } = useSubscription();
+  const isPro = plan === 'pro' || plan === 'team';
   const [mainTab, setMainTab] = useState<'library' | 'analyze'>('library');
   const [step, setStep]               = useState<Step>('input');
   const [url, setUrl]                 = useState('');
@@ -188,6 +191,42 @@ export default function VideoLessonsScreen() {
   const barWidth = progressAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] });
 
   // ── STEP 1: 입력 ──────────────────────────────────────────
+  // Pro 잠금 화면
+  if (!isPro) return (
+    <View style={[s.root, { justifyContent: 'center', alignItems: 'center', padding: 32 }]}>
+      <Text style={{ fontSize: 56, marginBottom: 16 }}>🔒</Text>
+      <Text style={{ fontSize: 22, fontWeight: '800', color: Colors.text, marginBottom: 10 }}>Pro 이상 전용</Text>
+      <Text style={{ fontSize: 14, color: Colors.subtext, textAlign: 'center', lineHeight: 22, marginBottom: 28 }}>
+        영상 레슨, 드로잉 분석, 영상 업로드 기능은{'\n'}
+        <Text style={{ color: Colors.accent, fontWeight: '700' }}>Pro / Team</Text> 플랜에서 사용할 수 있어요.
+      </Text>
+      <View style={{ gap: 10, width: '100%' }}>
+        {[
+          { plan: 'Starter', price: '$29', features: ['기본 분석', '10영상/월'] },
+          { plan: 'Pro', price: '$59', features: ['무제한 분석', '영상 레슨', 'Draw 공유'], highlight: true },
+          { plan: 'Team', price: '$149', features: ['팀 전체', '다중 영상', '전술 추천'], highlight: true },
+        ].map((p, i) => (
+          <Pressable key={i} style={[{
+            borderRadius: 14, padding: 16, borderWidth: p.highlight ? 2 : 1,
+            borderColor: p.highlight ? Colors.accent : Colors.border,
+            backgroundColor: p.highlight ? Colors.accent + '15' : Colors.card,
+            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+          }]}>
+            <View>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: p.highlight ? Colors.accent : Colors.text }}>{p.plan}</Text>
+              <Text style={{ fontSize: 11, color: Colors.subtext }}>{p.features.join(' · ')}</Text>
+            </View>
+            <Text style={{ fontSize: 18, fontWeight: '800', color: p.highlight ? Colors.accent : Colors.text }}>{p.price}<Text style={{ fontSize: 11 }}>/월</Text></Text>
+          </Pressable>
+        ))}
+      </View>
+      <Pressable style={{ marginTop: 20, height: 52, borderRadius: 12, backgroundColor: Colors.accent, width: '100%', justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: Colors.bg, fontSize: 16, fontWeight: '700' }}>업그레이드하기</Text>
+      </Pressable>
+      <Text style={{ marginTop: 12, fontSize: 11, color: Colors.subtext }}>현재 플랜: Free</Text>
+    </View>
+  );
+
   if (step === 'input') return (
     <ScrollView style={s.root} contentContainerStyle={s.container}>
       <Text style={s.title}>🎬 영상 레슨</Text>
