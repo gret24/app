@@ -1,4 +1,7 @@
 import { useState } from 'react';
+import { useRouter } from 'expo-router';
+
+const ADMIN_EMAILS = ['hshan16hhs@gmail.com'];
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
   Alert, Modal,
@@ -71,6 +74,8 @@ function UpgradePlanModal({
 
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
+  const router = useRouter();
+  const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email);
   const { plan, upgrade } = useSubscription();
 
   const [showUpgrade, setShowUpgrade] = useState(false);
@@ -177,6 +182,16 @@ export default function ProfileScreen() {
             ))}
           </View>
         </View>
+
+        {/* 관리자 버튼 */}
+        {isAdmin && (
+          <Pressable
+            style={[p.signOutBtn, { borderColor: '#FFD70066', backgroundColor: '#FFD70011' }]}
+            onPress={() => router.push('/admin' as any)}
+          >
+            <Text style={[p.signOutText, { color: '#FFD700' }]}>👑 관리자 대시보드</Text>
+          </Pressable>
+        )}
 
         {/* Sign Out */}
         <Pressable style={p.signOutBtn} onPress={handleSignOut}>

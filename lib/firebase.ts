@@ -1,4 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
+import { getFirestore } from 'firebase/firestore';
 import {
   getAuth,
   signInWithEmailAndPassword,
@@ -21,6 +22,7 @@ const firebaseConfig = {
 // 중복 초기화 방지
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
 export const auth = getAuth(app);
+export const db = getFirestore(app);
 
 import {
   GoogleAuthProvider,

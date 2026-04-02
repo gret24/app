@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Platform } from 'react-native';
+import { registerUser } from '../lib/userService';
 import {
   auth,
   signInWithEmailAndPassword,
@@ -58,6 +59,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (!email || !password || !name) throw new Error('필수 항목을 입력해주세요');
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName: name });
+    // Firestore에 사용자 등록
+    try { await registerUser(cred.user.uid, email, name); } catch (_) {}
   };
 
   const signOut = async () => {
