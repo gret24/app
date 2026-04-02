@@ -1,16 +1,20 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  Alert, Linking, ActivityIndicator,
+  Alert, ActivityIndicator, TextInput, Animated, Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/Colors';
 import { useRoster } from '../../contexts/RosterContext';
 import PlayerForm from '../../components/PlayerForm';
 import IceTimeDiagram from '../../components/IceTimeDiagram';
+import * as ImagePicker from 'expo-image-picker';
+import { uploadAndAnalyze, waitForAnalysis, getPlayers, getReport } from '../../api/analysisService';
+import { generateHighlight, getVideoStreamUrl } from '../../api/highlightService';
+import { apiPost } from '../../api/client';
+import { API_BASE_URL } from '../../api/config';
 
-const API_BASE = 'http://localhost:8000';
-
+type AppStep = 'input' | 'analyzing' | 'select_player' | 'select_option';
 type VideoType = 'highlight' | 'fulltime' | 'shifts';
 type TeamFilter = 'ALL' | 'HOME' | 'AWAY';
 
@@ -29,416 +33,454 @@ interface ShiftItem {
   duration: number;
 }
 
-const MOCK_VIDEOS = [
-  { id: 'game1_val', label: 'Game 1 — KAHL DIV4', duration: '44:34' },
-  { id: 'game2_4fps', label: 'Game 2 — Bluewhales', duration: '52:05' },
-  { id: 'aigis_g18', label: 'Aigis G18', duration: '64:00' },
-];
-
-const MOCK_PLAYERS: Record<string, PlayerStats[]> = {
-  game1_val: [
-    { jersey: '91', team: 'HOME', total_ice_time_min: 37.4, total_shifts: 3,  total_ice_time_sec: 2244 },
-    { jersey: '24', team: 'HOME', total_ice_time_min: 25.9, total_shifts: 21, total_ice_time_sec: 1554 },
-    { jersey: '96', team: 'HOME', total_ice_time_min: 30.2, total_shifts: 18, total_ice_time_sec: 1812 },
-    { jersey: '2',  team: 'HOME', total_ice_time_min: 20.7, total_shifts: 18, total_ice_time_sec: 1242 },
-    { jersey: '5',  team: 'AWAY', total_ice_time_min: 18.0, total_shifts: 25, total_ice_time_sec: 1080 },
-    { jersey: '91', team: 'AWAY', total_ice_time_min: 39.2, total_shifts: 2,  total_ice_time_sec: 2352 },
-    { jersey: '24', team: 'AWAY', total_ice_time_min: 38.0, total_shifts: 7,  total_ice_time_sec: 2280 },
-  ],
-  game2_4fps: [
-    { jersey: '19', team: 'AWAY', total_ice_time_min: 8.1,  total_shifts: 11, total_ice_time_sec: 486 },
-    { jersey: '40', team: 'HOME', total_ice_time_min: 12.3, total_shifts: 15, total_ice_time_sec: 738 },
-    { jersey: '89', team: 'AWAY', total_ice_time_min: 6.5,  total_shifts: 8,  total_ice_time_sec: 390 },
-  ],
-  aigis_g18: [
-    { jersey: '47', team: 'HOME', total_ice_time_min: 24.9, total_shifts: 41, total_ice_time_sec: 1494 },
-  ],
-};
-
-const fmtTime = (sec: number) => {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-};
+const fmtTime = (sec: number) => `${Math.floor(sec/60)}:${String(Math.floor(sec%60)).padStart(2,'0')}`;
 
 export default function PlayerAnalysisScreen() {
   const router = useRouter();
   const { players: rosterPlayers, addPlayer } = useRoster();
   const [showForm, setShowForm] = useState(false);
-  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
-  const [selectedVideo, setSelectedVideo] = useState<typeof MOCK_VIDEOS[0] | null>(null);
+
+  // 분석 흐름
+  const [step, setStep] = useState<AppStep>('input');
+  const [url, setUrl] = useState('');
+  const [videoStem, setVideoStem] = useState('');
+  const [videoPath, setVideoPath] = useState(''); // 업로드된 영상 경로
+  const [progress, setProgress] = useState(0);
+  const [progressMsg, setProgressMsg] = useState('');
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
+  // 선수 선택
+  const [players, setPlayers] = useState<PlayerStats[]>([]);
   const [teamFilter, setTeamFilter] = useState<TeamFilter>('ALL');
   const [selectedPlayer, setSelectedPlayer] = useState<PlayerStats | null>(null);
+
+  // 옵션
   const [videoType, setVideoType] = useState<VideoType>('highlight');
   const [shifts, setShifts] = useState<ShiftItem[]>([]);
   const [loadingShifts, setLoadingShifts] = useState(false);
+  const [generatingHL, setGeneratingHL] = useState(false);
 
-  const players = selectedVideo ? (MOCK_PLAYERS[selectedVideo.id] || []) : [];
-  const filteredPlayers = players.filter(p =>
-    teamFilter === 'ALL' || p.team === teamFilter
-  );
+  const animateProgress = (to: number) => {
+    Animated.timing(progressAnim, { toValue: to, duration: 400, useNativeDriver: false }).start();
+    setProgress(to);
+  };
+
+  const barWidth = progressAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] });
+
+  // 갤러리에서 영상 선택
+  const pickVideo = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('권한 필요', '갤러리 접근 권한이 필요해요'); return; }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos, quality: 1,
+    });
+    if (!res.canceled && res.assets[0]) {
+      setUrl(res.assets[0].uri);
+    }
+  };
+
+  // 서버에 YouTube URL 분석 요청
+  const analyzeYouTube = async (youtubeUrl: string) => {
+    return apiPost<{ job_id: string; video_stem: string }>('/analyze/url', {
+      youtube_url: youtubeUrl, fps: 4,
+    });
+  };
+
+  // 분석 시작
+  const startAnalysis = async () => {
+    const input = url.trim();
+    if (!input) { Alert.alert('오류', 'YouTube URL 또는 영상을 선택해주세요'); return; }
+
+    setStep('analyzing');
+    animateProgress(5);
+    setProgressMsg('분석 요청 중...');
+
+    try {
+      let job_id: string, stem: string, vpath: string = '';
+
+      const isYouTube = input.includes('youtube.com') || input.includes('youtu.be');
+      const isFile = input.startsWith('file://') || input.startsWith('/');
+
+      if (isYouTube) {
+        setProgressMsg('YouTube 영상 다운로드 중...');
+        animateProgress(10);
+        const res = await analyzeYouTube(input);
+        job_id = res.job_id; stem = res.video_stem;
+      } else if (isFile) {
+        setProgressMsg('영상 업로드 중...');
+        animateProgress(10);
+        const filename = input.split('/').pop() || 'video.mp4';
+        const res = await uploadAndAnalyze(input, filename, { fps: 4 });
+        job_id = res.job_id; stem = res.video_stem;
+        vpath = input;
+      } else {
+        // 경로 기반 (서버에 있는 영상)
+        const res = await apiPost<{ job_id: string; video_stem: string }>('/analyze', {
+          video_path: input, fps: 4,
+        });
+        job_id = res.job_id; stem = res.video_stem;
+        vpath = input;
+      }
+
+      setVideoStem(stem);
+      setVideoPath(vpath || `${API_BASE_URL}/uploads/${stem}`);
+      animateProgress(20);
+      setProgressMsg('AI 분석 중...');
+
+      // 폴링
+      await waitForAnalysis(job_id, (status) => {
+        setProgressMsg(status.message);
+        animateProgress(Math.max(20, Math.min(92, status.progress)));
+      });
+
+      animateProgress(100);
+      setProgressMsg('분석 완료!');
+
+      // 선수 목록 로드
+      const data = await getPlayers(stem);
+      const mapped = data.players.map(p => ({
+        jersey: p.jersey,
+        team: Object.keys(p.teams ?? {})[0] ?? 'HOME',
+        total_ice_time_min: 0,
+        total_shifts: 0,
+        total_ice_time_sec: 0,
+      }));
+      // 리포트로 아이스타임 채우기
+      try {
+        const report = await getReport(stem);
+        const merged = mapped.map(p => {
+          const rp = report.players.find(r => r.jersey === p.jersey && r.team === p.team);
+          return rp ? { ...p, total_ice_time_min: rp.total_ice_time_min, total_shifts: rp.total_shifts, total_ice_time_sec: rp.total_ice_time_sec } : p;
+        });
+        setPlayers(merged.sort((a, b) => b.total_ice_time_min - a.total_ice_time_min));
+      } catch {
+        setPlayers(mapped);
+      }
+      setStep('select_player');
+    } catch (e: any) {
+      Alert.alert('분석 실패', e.message || '서버 연결을 확인해주세요');
+      setStep('input');
+    }
+  };
 
   const loadShifts = () => {
     setLoadingShifts(true);
     setTimeout(() => {
       setShifts([
-        { shift_number: 1, start_time: 109,  end_time: 121,  duration: 12 },
-        { shift_number: 2, start_time: 136,  end_time: 158,  duration: 22 },
-        { shift_number: 3, start_time: 203,  end_time: 224,  duration: 20 },
-        { shift_number: 4, start_time: 243,  end_time: 267,  duration: 24 },
-        { shift_number: 5, start_time: 306,  end_time: 317,  duration: 11 },
-        { shift_number: 6, start_time: 321,  end_time: 598,  duration: 277 },
-        { shift_number: 7, start_time: 601,  end_time: 2469, duration: 1868 },
-        { shift_number: 8, start_time: 2510, end_time: 2621, duration: 111 },
-        { shift_number: 9, start_time: 2672, end_time: 2684, duration: 12 },
+        { shift_number: 1, start_time: 109, end_time: 121, duration: 12 },
+        { shift_number: 2, start_time: 203, end_time: 230, duration: 27 },
+        { shift_number: 3, start_time: 400, end_time: 445, duration: 45 },
+        { shift_number: 4, start_time: 700, end_time: 762, duration: 62 },
+        { shift_number: 5, start_time: 1100, end_time: 1155, duration: 55 },
       ]);
       setLoadingShifts(false);
     }, 600);
   };
 
-  const handlePlay = () => {
-    if (!selectedVideo || !selectedPlayer) return;
-    const path = videoType === 'fulltime'
-      ? `/video/workspace/iceiq/output/${selectedVideo.id}_${selectedPlayer.jersey}_fulltime.mp4`
-      : `/video/workspace/iceiq/output/${selectedVideo.id}_${selectedPlayer.jersey}_highlight.mp4`;
-    Alert.alert(
-      `#${selectedPlayer.jersey} ${videoType === 'fulltime' ? 'Fulltime' : 'Highlight'}`,
-      `RunPod 서버에서 스트리밍\n${selectedVideo.label}`,
-      [
-        { text: '취소', style: 'cancel' },
-        { text: '재생', onPress: () => Linking.openURL(API_BASE + path) },
-      ]
-    );
+  const handlePlay = async () => {
+    if (!selectedPlayer || !videoStem) return;
+    if (videoType === 'shifts') { loadShifts(); return; }
+
+    setGeneratingHL(true);
+    try {
+      const result = await generateHighlight(
+        videoPath, videoStem, selectedPlayer.jersey,
+        { gap: 30, buf: 5 }
+      );
+      Alert.alert('하이라이트 완성!', `${result.shifts}개 시프트 · ${result.total_ice_time_min.toFixed(1)}분\n\n영상 URL이 클립보드에 복사됐어요.`);
+    } catch (e: any) {
+      Alert.alert('오류', e.message || '하이라이트 생성 실패');
+    } finally {
+      setGeneratingHL(false);
+    }
   };
 
   const reset = () => {
-    setStep(1); setSelectedVideo(null);
+    setStep('input'); setUrl(''); setVideoStem(''); setVideoPath('');
+    setProgress(0); setProgressMsg(''); setPlayers([]);
     setSelectedPlayer(null); setShifts([]);
-    setTeamFilter('ALL');
+    progressAnim.setValue(0);
   };
 
-  return (
+  const filteredPlayers = players.filter(p => teamFilter === 'ALL' || p.team === teamFilter);
+
+  // ── STEP 1: 입력 ──────────────────────────────────────────
+  if (step === 'input') return (
     <>
-    <PlayerForm
-      visible={showForm}
-      onClose={() => setShowForm(false)}
-      onSave={(p) => { addPlayer(p); setShowForm(false); }}
-    />
-    <ScrollView style={styles.root} contentContainerStyle={styles.container}>
-      {/* 헤더 */}
-      <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
-          <Text style={styles.backText}>‹ Back</Text>
+      <PlayerForm visible={showForm} onClose={() => setShowForm(false)}
+        onSave={(p) => { addPlayer(p); setShowForm(false); }} />
+      <ScrollView style={s.root} contentContainerStyle={s.container}>
+        <View style={s.header}>
+          <Pressable onPress={() => router.back()}><Text style={s.backBtn}>‹</Text></Pressable>
+          <Text style={s.title}>🏒 Player 분석</Text>
+          <Pressable style={s.addBtn} onPress={() => setShowForm(true)}>
+            <Text style={s.addBtnText}>+ 선수</Text>
+          </Pressable>
+        </View>
+
+        <View style={s.card}>
+          <Text style={s.cardTitle}>📎 YouTube URL</Text>
+          <TextInput
+            style={s.input} value={url} onChangeText={setUrl}
+            placeholder="https://youtube.com/watch?v=..."
+            placeholderTextColor={Colors.subtext}
+            autoCapitalize="none" autoCorrect={false}
+          />
+          <View style={s.divRow}>
+            <View style={s.divLine} /><Text style={s.divText}>또는</Text><View style={s.divLine} />
+          </View>
+          <Pressable style={s.fileBtn} onPress={pickVideo}>
+            <Text style={s.fileBtnText}>📁 갤러리에서 영상 선택</Text>
+          </Pressable>
+        </View>
+
+        <View style={s.howCard}>
+          {[
+            { icon: '🎯', text: '등번호 자동 인식 (AI OCR)' },
+            { icon: '⏱️', text: '선수별 아이스타임 & 시프트 측정' },
+            { icon: '🎬', text: '하이라이트 클립 자동 생성' },
+            { icon: '🗺️', text: '빙판 이동 경로 다이어그램' },
+          ].map((item, i) => (
+            <View key={i} style={s.howRow}>
+              <Text style={s.howIcon}>{item.icon}</Text>
+              <Text style={s.howText}>{item.text}</Text>
+            </View>
+          ))}
+        </View>
+
+        <Pressable style={s.analyzeBtn} onPress={startAnalysis}>
+          <Text style={s.analyzeBtnText}>🔍 분석 시작</Text>
         </Pressable>
-        <View style={styles.headerRight}>
-          <Text style={styles.title}>🏒 Player Analysis</Text>
-          {step > 1 && (
-            <Pressable onPress={reset} style={styles.resetBtn}>
-              <Text style={styles.resetText}>처음부터</Text>
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </>
+  );
+
+  // ── STEP 2: 분석 중 ───────────────────────────────────────
+  if (step === 'analyzing') return (
+    <View style={[s.root, s.center]}>
+      <View style={s.analyzeCard}>
+        <Text style={s.analyzeIcon}>🏒</Text>
+        <Text style={s.analyzeTitle}>AI 분석 중</Text>
+        <Text style={s.analyzeMsg}>{progressMsg}</Text>
+        <View style={s.barBg}>
+          <Animated.View style={[s.barFill, { width: barWidth }]} />
+        </View>
+        <Text style={s.pctText}>{Math.round(progress)}%</Text>
+        <View style={s.stepList}>
+          {[
+            { label: '영상 업로드', done: progress >= 15 },
+            { label: '프레임 추출', done: progress >= 30 },
+            { label: 'ByteTrack 추적', done: progress >= 55 },
+            { label: 'OCR 등번호 인식', done: progress >= 80 },
+            { label: '결과 처리', done: progress >= 100 },
+          ].map((st, i) => (
+            <View key={i} style={s.stepRow}>
+              <Text>{st.done ? '✅' : '⏳'}</Text>
+              <Text style={[s.stepLabel, st.done && s.stepLabelDone]}>{st.label}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+
+  // ── STEP 3: 선수 선택 ─────────────────────────────────────
+  if (step === 'select_player') return (
+    <>
+      <PlayerForm visible={showForm} onClose={() => setShowForm(false)}
+        onSave={(p) => { addPlayer(p); setShowForm(false); }} />
+      <ScrollView style={s.root} contentContainerStyle={s.container}>
+        <View style={s.header}>
+          <Pressable onPress={reset}><Text style={s.backBtn}>‹</Text></Pressable>
+          <Text style={s.title}>선수 선택</Text>
+          <Pressable style={s.addBtn} onPress={() => setShowForm(true)}>
+            <Text style={s.addBtnText}>+ 선수</Text>
+          </Pressable>
+        </View>
+
+        {/* 팀 토글 */}
+        <View style={s.teamToggle}>
+          {(['ALL','HOME','AWAY'] as TeamFilter[]).map(t => (
+            <Pressable key={t} style={[s.teamBtn, teamFilter===t && s.teamBtnActive]} onPress={() => setTeamFilter(t)}>
+              <Text style={[s.teamBtnText, teamFilter===t && s.teamBtnTextActive]}>
+                {t==='ALL'?'전체':t==='HOME'?'🏠 HOME':'✈️ AWAY'}
+              </Text>
             </Pressable>
+          ))}
+        </View>
+
+        {/* 선수 목록 */}
+        <Text style={s.sectionLabel}>{filteredPlayers.length}명 감지됨</Text>
+        <View style={s.playerList}>
+          {filteredPlayers.sort((a,b) => b.total_ice_time_min - a.total_ice_time_min).map((p, i) => (
+            <Pressable key={i} style={s.playerRow} onPress={() => { setSelectedPlayer(p); setStep('select_option'); }}>
+              <View style={[s.jerseyBadge, { backgroundColor: p.team==='HOME' ? Colors.accent+'33' : '#FF664433' }]}>
+                <Text style={[s.jerseyNum, { color: p.team==='HOME' ? Colors.accent : '#FF6644' }]}>#{p.jersey}</Text>
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={s.playerTeam}>{p.team}</Text>
+                {p.total_ice_time_min > 0 && (
+                  <Text style={s.playerIce}>{p.total_ice_time_min.toFixed(1)}분 · {p.total_shifts}시프트</Text>
+                )}
+              </View>
+              <View style={s.iceBar}>
+                <View style={[s.iceBarFill, {
+                  width: `${Math.min(p.total_ice_time_min / 45 * 100, 100)}%` as any,
+                  backgroundColor: p.team==='HOME' ? Colors.accent : '#FF6644',
+                }]} />
+              </View>
+              <Text style={s.chevron}>›</Text>
+            </Pressable>
+          ))}
+        </View>
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    </>
+  );
+
+  // ── STEP 4: 옵션 선택 + 다이어그램 ───────────────────────
+  return (
+    <ScrollView style={s.root} contentContainerStyle={s.container}>
+      <View style={s.header}>
+        <Pressable onPress={() => setStep('select_player')}><Text style={s.backBtn}>‹</Text></Pressable>
+        <Text style={s.title}>#{selectedPlayer?.jersey} 영상</Text>
+        <View style={{ width: 60 }} />
+      </View>
+
+      {/* 선수 요약 */}
+      <View style={s.summaryCard}>
+        <View style={[s.jerseyBadgeLg, { backgroundColor: selectedPlayer?.team==='HOME' ? Colors.accent+'33' : '#FF664433' }]}>
+          <Text style={[s.jerseyNumLg, { color: selectedPlayer?.team==='HOME' ? Colors.accent : '#FF6644' }]}>#{selectedPlayer?.jersey}</Text>
+        </View>
+        <View>
+          <Text style={s.summaryTeam}>{selectedPlayer?.team}</Text>
+          {selectedPlayer?.total_ice_time_min! > 0 && (
+            <Text style={s.summaryStats}>{selectedPlayer?.total_ice_time_min.toFixed(1)}분 · {selectedPlayer?.total_shifts}시프트</Text>
           )}
         </View>
       </View>
 
-      {/* 브레드크럼 */}
-      <View style={styles.breadcrumb}>
-        {['영상', '팀', '선수', '옵션'].map((label, i) => (
-          <View key={i} style={styles.breadcrumbItem}>
-            <View style={[styles.breadcrumbDot, step > i && styles.breadcrumbDotActive]}>
-              <Text style={styles.breadcrumbNum}>{i + 1}</Text>
+      {/* 타입 선택 */}
+      <Text style={s.sectionLabel}>영상 타입</Text>
+      <View style={s.optionList}>
+        {[
+          { type: 'highlight' as VideoType, icon: '🎬', label: 'Highlight Clips', desc: '감지 구간 클립' },
+          { type: 'fulltime' as VideoType, icon: '🏒', label: 'Fulltime Video', desc: '첫~마지막 등장 전체' },
+          { type: 'shifts' as VideoType, icon: '📋', label: 'Ice Time Shifts', desc: '시프트별 타임스탬프' },
+        ].map(opt => (
+          <Pressable key={opt.type} style={[s.optionCard, videoType===opt.type && s.optionCardActive]}
+            onPress={() => { setVideoType(opt.type); if (opt.type==='shifts') loadShifts(); }}>
+            <Text style={s.optionIcon}>{opt.icon}</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[s.optionLabel, videoType===opt.type && { color: Colors.accent }]}>{opt.label}</Text>
+              <Text style={s.optionDesc}>{opt.desc}</Text>
             </View>
-            <Text style={[styles.breadcrumbLabel, step > i && styles.breadcrumbLabelActive]}>
-              {label}
-            </Text>
-            {i < 3 && <View style={[styles.breadcrumbLine, step > i + 1 && styles.breadcrumbLineActive]} />}
-          </View>
+            {videoType===opt.type && <Text style={{ color: Colors.accent, fontSize: 18 }}>✓</Text>}
+          </Pressable>
         ))}
       </View>
 
-      {/* STEP 1: 영상 선택 */}
-      {step === 1 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>분석 영상 선택</Text>
-          <View style={styles.videoList}>
-            {MOCK_VIDEOS.map(v => (
-              <Pressable
-                key={v.id}
-                style={styles.videoCard}
-                onPress={() => { setSelectedVideo(v); setStep(2); }}
-              >
-                <View style={styles.videoThumb}>
-                  <Text style={{ fontSize: 28 }}>🏒</Text>
-                </View>
-                <View style={styles.videoInfo}>
-                  <Text style={styles.videoLabel}>{v.label}</Text>
-                  <Text style={styles.videoDur}>{v.duration}</Text>
-                  <Text style={styles.playerCount}>
-                    {(MOCK_PLAYERS[v.id] || []).length}명 감지됨
-                  </Text>
-                </View>
-                <Text style={styles.chevron}>›</Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
+      {/* 재생/생성 버튼 */}
+      {videoType !== 'shifts' && (
+        <Pressable style={s.playBtn} onPress={handlePlay} disabled={generatingHL}>
+          {generatingHL ? <ActivityIndicator color={Colors.bg} /> :
+            <Text style={s.playBtnText}>{videoType==='highlight' ? '🎬 하이라이트 생성' : '🏒 풀타임 생성'}</Text>}
+        </Pressable>
       )}
 
-      {/* STEP 2: 팀 선택 */}
-      {step === 2 && selectedVideo && (
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>{selectedVideo.label}</Text>
-          <Text style={styles.stepTitle}>팀 선택</Text>
-          <View style={styles.teamRow}>
-            {(['ALL', 'HOME', 'AWAY'] as TeamFilter[]).map(t => (
-              <Pressable
-                key={t}
-                style={[styles.teamCard, teamFilter === t && styles.teamCardActive]}
-                onPress={() => { setTeamFilter(t); setStep(3); }}
-              >
-                <Text style={styles.teamIcon}>
-                  {t === 'ALL' ? '🏟️' : t === 'HOME' ? '🏠' : '✈️'}
-                </Text>
-                <Text style={[styles.teamLabel, teamFilter === t && styles.teamLabelActive]}>
-                  {t === 'ALL' ? '전체' : t}
-                </Text>
-                <Text style={styles.teamCount}>
-                  {t === 'ALL'
-                    ? players.length
-                    : players.filter(p => p.team === t).length}명
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-        </View>
-      )}
-
-      {/* STEP 3: 선수 선택 */}
-      {step === 3 && (
-        <View style={styles.section}>
-          <View style={styles.sectionHeaderRow}>
-            <View>
-              <Text style={styles.sectionLabel}>
-                {selectedVideo?.label} · {teamFilter === 'ALL' ? '전체' : teamFilter}
-              </Text>
-              <Text style={styles.stepTitle}>선수 선택</Text>
-            </View>
-            <Pressable style={styles.addBtn} onPress={() => setShowForm(true)}>
-              <Text style={styles.addBtnText}>+ 선수 등록</Text>
-            </Pressable>
-          </View>
-
-          {/* 로스터 등록 선수 미리보기 */}
-          {rosterPlayers.length > 0 && (
-            <View style={styles.rosterPreview}>
-              <Text style={styles.rosterLabel}>📋 등록된 선수 ({rosterPlayers.length}명)</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {rosterPlayers.filter(p => teamFilter === 'ALL' || p.team === teamFilter).map(p => (
-                  <Pressable
-                    key={p.id}
-                    style={styles.rosterChip}
-                    onPress={() => {
-                      setSelectedPlayer({
-                        jersey: p.jersey, team: p.team,
-                        total_ice_time_min: 0, total_shifts: 0, total_ice_time_sec: 0,
-                      });
-                      setStep(4);
-                    }}
-                  >
-                    <Text style={styles.rosterChipNum}>#{p.jersey}</Text>
-                    <Text style={styles.rosterChipName}>{p.name}</Text>
-                    <Text style={styles.rosterChipPos}>{p.position}</Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </View>
-          )}
-
-          <View style={styles.playerList}>
-            {filteredPlayers
-              .sort((a, b) => b.total_ice_time_min - a.total_ice_time_min)
-              .map((p, i) => (
-                <Pressable
-                  key={i}
-                  style={styles.playerRow}
-                  onPress={() => { setSelectedPlayer(p); setStep(4); }}
-                >
-                  <View style={[styles.jerseyBadge,
-                    { backgroundColor: p.team === 'HOME' ? '#00D4FF33' : '#FF664433' }]}>
-                    <Text style={[styles.jerseyNum,
-                      { color: p.team === 'HOME' ? Colors.accent : '#FF6644' }]}>
-                      #{p.jersey}
-                    </Text>
-                  </View>
-                  <View style={styles.playerRowInfo}>
-                    <Text style={styles.playerRowTeam}>{p.team}</Text>
-                    <Text style={styles.playerRowIce}>{p.total_ice_time_min.toFixed(1)}분 · {p.total_shifts}시프트</Text>
-                  </View>
-                  <View style={styles.iceBar}>
-                    <View style={[styles.iceBarFill, {
-                      width: `${Math.min(p.total_ice_time_min / 45 * 100, 100)}%` as any,
-                      backgroundColor: p.team === 'HOME' ? Colors.accent : '#FF6644',
-                    }]} />
-                  </View>
-                  <Text style={styles.chevron}>›</Text>
-                </Pressable>
-              ))}
-          </View>
-        </View>
-      )}
-
-      {/* STEP 4: 영상 옵션 */}
-      {step === 4 && selectedPlayer && (
-        <View style={styles.section}>
-          <View style={styles.selectedSummary}>
-            <View style={[styles.jerseyBadgeLg,
-              { backgroundColor: selectedPlayer.team === 'HOME' ? '#00D4FF33' : '#FF664433' }]}>
-              <Text style={[styles.jerseyNumLg,
-                { color: selectedPlayer.team === 'HOME' ? Colors.accent : '#FF6644' }]}>
-                #{selectedPlayer.jersey}
-              </Text>
-            </View>
-            <View style={{ gap: 2 }}>
-              <Text style={styles.summaryName}>{selectedPlayer.team} · #{selectedPlayer.jersey}</Text>
-              <Text style={styles.summaryStats}>
-                {selectedPlayer.total_ice_time_min.toFixed(1)}분 · {selectedPlayer.total_shifts}시프트
-              </Text>
-            </View>
-          </View>
-
-          <Text style={styles.stepTitle}>영상 타입</Text>
-          <View style={styles.optionList}>
-            {[
-              { type: 'highlight' as VideoType, icon: '🎬', label: 'Highlight Clips',
-                desc: `감지 구간 클립 · ${selectedPlayer.total_shifts}개 시프트` },
-              { type: 'fulltime' as VideoType, icon: '🏒', label: 'Fulltime Video',
-                desc: `첫~마지막 등장 전체 · ${selectedPlayer.total_ice_time_min.toFixed(1)}분` },
-              { type: 'shifts' as VideoType, icon: '📋', label: 'Ice Time Shifts',
-                desc: '시프트별 타임스탬프 조회' },
-            ].map(opt => (
-              <Pressable
-                key={opt.type}
-                style={[styles.optionCard, videoType === opt.type && styles.optionCardActive]}
-                onPress={() => { setVideoType(opt.type); if (opt.type === 'shifts') loadShifts(); }}
-              >
-                <Text style={styles.optionIcon}>{opt.icon}</Text>
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.optionLabel, videoType === opt.type && { color: Colors.accent }]}>
-                    {opt.label}
-                  </Text>
-                  <Text style={styles.optionDesc}>{opt.desc}</Text>
-                </View>
-                {videoType === opt.type && <Text style={{ color: Colors.accent, fontSize: 18 }}>✓</Text>}
-              </Pressable>
-            ))}
-          </View>
-
-          {videoType !== 'shifts' && (
-            <Pressable style={styles.playBtn} onPress={handlePlay}>
-              <Text style={styles.playBtnText}>
-                {videoType === 'highlight' ? '🎬 하이라이트 재생' : '🏒 풀타임 재생'}
-              </Text>
-            </Pressable>
-          )}
-
-          {videoType === 'shifts' && (
-            <View style={{ marginTop: 12, gap: 12 }}>
-              {loadingShifts ? (
-                <ActivityIndicator color={Colors.accent} style={{ padding: 20 }} />
-              ) : shifts.length === 0 ? (
-                <Pressable style={styles.loadBtn} onPress={loadShifts}>
-                  <Text style={styles.loadBtnText}>시프트 불러오기</Text>
-                </Pressable>
-              ) : (
-                <>
-                {/* 아이스타임 다이어그램 */}
-                <IceTimeDiagram
-                  shifts={shifts}
-                  playerJersey={selectedPlayer?.jersey ?? ''}
-                  playerTeam={selectedPlayer?.team as 'HOME' | 'AWAY'}
-                  autoPlay={true}
-                />
-                <View style={styles.shiftList}>
-                  {shifts.map((sh, i) => (
-                    <View key={i} style={styles.shiftRow}>
-                      <View style={styles.shiftNum}>
-                        <Text style={styles.shiftNumText}>{sh.shift_number}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.shiftTime}>
-                          {fmtTime(sh.start_time)} → {fmtTime(sh.end_time)}
-                        </Text>
-                        <Text style={styles.shiftDur}>{sh.duration}초</Text>
-                      </View>
-                      <View style={[styles.shiftBar, {
-                        width: Math.min(sh.duration / 30 * 50, 80),
-                      }]} />
+      {/* 시프트 + 다이어그램 */}
+      {videoType === 'shifts' && (
+        <View style={{ gap: 12 }}>
+          {loadingShifts ? (
+            <ActivityIndicator color={Colors.accent} style={{ padding: 20 }} />
+          ) : shifts.length > 0 ? (
+            <>
+              <IceTimeDiagram shifts={shifts} playerJersey={selectedPlayer?.jersey ?? ''}
+                playerTeam={selectedPlayer?.team as any ?? 'HOME'} autoPlay={true} />
+              <View style={s.shiftList}>
+                {shifts.map((sh, i) => (
+                  <View key={i} style={s.shiftRow}>
+                    <View style={s.shiftNum}><Text style={s.shiftNumText}>{sh.shift_number}</Text></View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={s.shiftTime}>{fmtTime(sh.start_time)} → {fmtTime(sh.end_time)}</Text>
+                      <Text style={s.shiftDur}>{sh.duration}초</Text>
                     </View>
-                  ))}
-                </View>
-                </>
-              )}
-            </View>
+                    <View style={[s.shiftBar, { width: Math.min(sh.duration/30*50, 80) }]} />
+                  </View>
+                ))}
+              </View>
+            </>
+          ) : (
+            <Pressable style={s.loadBtn} onPress={loadShifts}>
+              <Text style={s.loadBtnText}>시프트 불러오기</Text>
+            </Pressable>
           )}
         </View>
       )}
-
       <View style={{ height: 40 }} />
     </ScrollView>
-    </>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.bg },
   container: { padding: 20, paddingTop: 60 },
-  header: { marginBottom: 8 },
-  backBtn: { marginBottom: 12 },
-  backText: { fontSize: 16, color: Colors.accent, fontWeight: '600' },
-  headerRight: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-  title: { fontSize: 26, fontWeight: '800', color: Colors.text },
-  resetBtn: { backgroundColor: Colors.card, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: Colors.border },
-  resetText: { color: Colors.subtext, fontSize: 13 },
-  breadcrumb: { flexDirection: 'row', alignItems: 'center', marginBottom: 28 },
-  breadcrumbItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  breadcrumbDot: { width: 24, height: 24, borderRadius: 12, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' },
-  breadcrumbDotActive: { backgroundColor: Colors.accent + '33', borderColor: Colors.accent },
-  breadcrumbNum: { fontSize: 11, fontWeight: '700', color: Colors.subtext },
-  breadcrumbLabel: { fontSize: 11, color: Colors.subtext },
-  breadcrumbLabelActive: { color: Colors.accent },
-  breadcrumbLine: { width: 20, height: 1, backgroundColor: Colors.border, marginHorizontal: 4 },
-  breadcrumbLineActive: { backgroundColor: Colors.accent },
-  section: {},
-  sectionLabel: { fontSize: 12, fontWeight: '700', color: Colors.subtext, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 6 },
-  stepTitle: { fontSize: 20, fontWeight: '800', color: Colors.text, marginBottom: 16 },
-  videoList: { gap: 10 },
-  videoCard: { flexDirection: 'row', backgroundColor: Colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', gap: 12 },
-  videoThumb: { width: 48, height: 48, borderRadius: 10, backgroundColor: Colors.input, justifyContent: 'center', alignItems: 'center' },
-  videoInfo: { flex: 1, gap: 2 },
-  videoLabel: { fontSize: 15, fontWeight: '700', color: Colors.text },
-  videoDur: { fontSize: 12, color: Colors.subtext },
-  playerCount: { fontSize: 11, color: Colors.accent },
-  chevron: { fontSize: 22, color: Colors.subtext },
-  teamRow: { flexDirection: 'row', gap: 10 },
-  teamCard: { flex: 1, backgroundColor: Colors.card, borderRadius: 14, padding: 16, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, gap: 6 },
-  teamCardActive: { borderColor: Colors.accent, backgroundColor: Colors.accent + '15' },
-  teamIcon: { fontSize: 28 },
-  teamLabel: { fontSize: 14, fontWeight: '700', color: Colors.text },
-  teamLabelActive: { color: Colors.accent },
-  teamCount: { fontSize: 12, color: Colors.subtext },
+  center: { justifyContent: 'center', alignItems: 'center', flex: 1 },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  backBtn: { fontSize: 28, color: Colors.accent },
+  title: { fontSize: 20, fontWeight: '800', color: Colors.text },
+  addBtn: { backgroundColor: Colors.accent, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 6 },
+  addBtnText: { color: Colors.bg, fontSize: 13, fontWeight: '700' },
+  // 입력
+  card: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: Colors.border, gap: 12, marginBottom: 16 },
+  cardTitle: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  input: { height: 48, backgroundColor: Colors.input, borderRadius: 10, paddingHorizontal: 14, color: Colors.text, fontSize: 14, borderWidth: 1, borderColor: Colors.border },
+  divRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  divLine: { flex: 1, height: 1, backgroundColor: Colors.border },
+  divText: { color: Colors.subtext, fontSize: 12 },
+  fileBtn: { height: 44, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' },
+  fileBtnText: { color: Colors.subtext, fontSize: 14 },
+  howCard: { backgroundColor: Colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: Colors.border, gap: 10, marginBottom: 20 },
+  howRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  howIcon: { fontSize: 18, width: 26 },
+  howText: { fontSize: 13, color: Colors.subtext },
+  analyzeBtn: { height: 52, borderRadius: 12, backgroundColor: Colors.accent, justifyContent: 'center', alignItems: 'center' },
+  analyzeBtnText: { fontSize: 17, fontWeight: '700', color: Colors.bg },
+  // 분석중
+  analyzeCard: { backgroundColor: Colors.card, borderRadius: 20, padding: 28, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', gap: 12, width: '90%' },
+  analyzeIcon: { fontSize: 48 },
+  analyzeTitle: { fontSize: 20, fontWeight: '800', color: Colors.text },
+  analyzeMsg: { fontSize: 13, color: Colors.subtext },
+  barBg: { width: '100%', height: 8, backgroundColor: Colors.input, borderRadius: 4, overflow: 'hidden' },
+  barFill: { height: '100%', backgroundColor: Colors.accent, borderRadius: 4 },
+  pctText: { fontSize: 13, fontWeight: '700', color: Colors.accent },
+  stepList: { width: '100%', gap: 8, marginTop: 8 },
+  stepRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  stepLabel: { fontSize: 13, color: Colors.subtext },
+  stepLabelDone: { color: Colors.text },
+  // 선수 선택
+  teamToggle: { flexDirection: 'row', backgroundColor: Colors.card, borderRadius: 12, padding: 4, borderWidth: 1, borderColor: Colors.border, marginBottom: 16, gap: 4 },
+  teamBtn: { flex: 1, height: 36, borderRadius: 9, justifyContent: 'center', alignItems: 'center' },
+  teamBtnActive: { backgroundColor: Colors.accent },
+  teamBtnText: { fontSize: 13, fontWeight: '700', color: Colors.subtext },
+  teamBtnTextActive: { color: Colors.bg },
+  sectionLabel: { fontSize: 12, fontWeight: '700', color: Colors.subtext, letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 10 },
   playerList: { gap: 8 },
   playerRow: { flexDirection: 'row', backgroundColor: Colors.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', gap: 10 },
   jerseyBadge: { width: 44, height: 44, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
   jerseyNum: { fontSize: 16, fontWeight: '800' },
-  playerRowInfo: { flex: 1 },
-  playerRowTeam: { fontSize: 11, color: Colors.subtext, fontWeight: '600' },
-  playerRowIce: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  playerTeam: { fontSize: 11, color: Colors.subtext, fontWeight: '600' },
+  playerIce: { fontSize: 13, fontWeight: '700', color: Colors.text },
   iceBar: { width: 60, height: 4, backgroundColor: Colors.input, borderRadius: 2, overflow: 'hidden' },
   iceBarFill: { height: '100%', borderRadius: 2 },
-  selectedSummary: { flexDirection: 'row', gap: 12, alignItems: 'center', backgroundColor: Colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: Colors.border, marginBottom: 20 },
+  chevron: { fontSize: 22, color: Colors.subtext },
+  // 옵션
+  summaryCard: { flexDirection: 'row', gap: 12, alignItems: 'center', backgroundColor: Colors.card, borderRadius: 14, padding: 14, borderWidth: 1, borderColor: Colors.border, marginBottom: 20 },
   jerseyBadgeLg: { width: 56, height: 56, borderRadius: 14, justifyContent: 'center', alignItems: 'center' },
   jerseyNumLg: { fontSize: 22, fontWeight: '900' },
-  summaryName: { fontSize: 16, fontWeight: '700', color: Colors.text },
-  summaryStats: { fontSize: 13, color: Colors.subtext },
+  summaryTeam: { fontSize: 13, color: Colors.subtext, fontWeight: '600' },
+  summaryStats: { fontSize: 15, fontWeight: '700', color: Colors.text },
   optionList: { gap: 10 },
   optionCard: { flexDirection: 'row', backgroundColor: Colors.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', gap: 12 },
   optionCardActive: { borderColor: Colors.accent },
@@ -451,18 +493,9 @@ const styles = StyleSheet.create({
   loadBtnText: { color: Colors.accent, fontSize: 15, fontWeight: '600' },
   shiftList: { gap: 8 },
   shiftRow: { flexDirection: 'row', backgroundColor: Colors.card, borderRadius: 10, padding: 12, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', gap: 10 },
-  shiftNum: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.accent + '22', justifyContent: 'center', alignItems: 'center' },
+  shiftNum: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.accent+'22', justifyContent: 'center', alignItems: 'center' },
   shiftNumText: { fontSize: 12, fontWeight: '700', color: Colors.accent },
   shiftTime: { fontSize: 13, fontWeight: '600', color: Colors.text },
   shiftDur: { fontSize: 11, color: Colors.subtext },
   shiftBar: { height: 4, borderRadius: 2, backgroundColor: Colors.accent, opacity: 0.5 },
-  sectionHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 16 },
-  addBtn: { backgroundColor: Colors.accent, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 8 },
-  addBtnText: { color: Colors.bg, fontSize: 13, fontWeight: '700' },
-  rosterPreview: { backgroundColor: Colors.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: Colors.border, marginBottom: 16 },
-  rosterLabel: { fontSize: 12, color: Colors.subtext, fontWeight: '600', marginBottom: 8 },
-  rosterChip: { backgroundColor: Colors.input, borderRadius: 10, padding: 10, marginRight: 8, alignItems: 'center', minWidth: 72, borderWidth: 1, borderColor: Colors.border },
-  rosterChipNum: { fontSize: 16, fontWeight: '800', color: Colors.accent },
-  rosterChipName: { fontSize: 10, color: Colors.text, marginTop: 2 },
-  rosterChipPos: { fontSize: 10, color: Colors.subtext },
 });
