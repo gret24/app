@@ -72,7 +72,7 @@ function UpgradePlanModal({
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const { plan, upgrade } = useSubscription();
-  const { lang, setLang } = require('../../contexts/LanguageContext').useLang();
+
   const [showUpgrade, setShowUpgrade] = useState(false);
 
   const initials = (user?.displayName ?? user?.email ?? 'U')
@@ -175,25 +175,6 @@ export default function ProfileScreen() {
                 <Text style={p.menuArrow}>›</Text>
               </Pressable>
             ))}
-          </View>
-        </View>
-
-        {/* 언어 선택 */}
-        <View style={p.settingsCard}>
-          <Text style={p.settingsLabel}>🌐 Language / 언어</Text>
-          <View style={p.langRow}>
-            <Pressable
-              style={[p.langBtn, lang === 'ko' && p.langBtnActive]}
-              onPress={() => setLang('ko')}
-            >
-              <Text style={[p.langText, lang === 'ko' && p.langTextActive]}>🇰🇷 한국어</Text>
-            </Pressable>
-            <Pressable
-              style={[p.langBtn, lang === 'en' && p.langBtnActive]}
-              onPress={() => setLang('en')}
-            >
-              <Text style={[p.langText, lang === 'en' && p.langTextActive]}>🇺🇸 English</Text>
-            </Pressable>
           </View>
         </View>
 
