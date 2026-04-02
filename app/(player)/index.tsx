@@ -7,6 +7,7 @@ import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/Colors';
 import { useRoster } from '../../contexts/RosterContext';
 import PlayerForm from '../../components/PlayerForm';
+import IceTimeDiagram from '../../components/IceTimeDiagram';
 
 const API_BASE = 'http://localhost:8000';
 
@@ -340,7 +341,7 @@ export default function PlayerAnalysisScreen() {
           )}
 
           {videoType === 'shifts' && (
-            <View style={{ marginTop: 12 }}>
+            <View style={{ marginTop: 12, gap: 12 }}>
               {loadingShifts ? (
                 <ActivityIndicator color={Colors.accent} style={{ padding: 20 }} />
               ) : shifts.length === 0 ? (
@@ -348,6 +349,14 @@ export default function PlayerAnalysisScreen() {
                   <Text style={styles.loadBtnText}>시프트 불러오기</Text>
                 </Pressable>
               ) : (
+                <>
+                {/* 아이스타임 다이어그램 */}
+                <IceTimeDiagram
+                  shifts={shifts}
+                  playerJersey={selectedPlayer?.jersey ?? ''}
+                  playerTeam={selectedPlayer?.team as 'HOME' | 'AWAY'}
+                  autoPlay={true}
+                />
                 <View style={styles.shiftList}>
                   {shifts.map((sh, i) => (
                     <View key={i} style={styles.shiftRow}>
@@ -366,6 +375,7 @@ export default function PlayerAnalysisScreen() {
                     </View>
                   ))}
                 </View>
+                </>
               )}
             </View>
           )}
