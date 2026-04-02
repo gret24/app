@@ -121,7 +121,7 @@ export default function LessonsScreen() {
   }, [search, activeCategory]);
 
   const aiRecommended = useMemo(() => MOCK_LESSONS.filter(l => l.isPro).slice(0, 3), []);
-  const featured = useMemo(() => filtered.filter(l => !l.isPro).slice(0, 6), [filtered]);
+  const featured = useMemo(() => filtered.slice(0, 6), [filtered]);
   const drills = useMemo(() => filtered.slice(0, 5), [filtered]);
 
   return (
