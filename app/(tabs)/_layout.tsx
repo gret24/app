@@ -33,6 +33,13 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="videos"
+        options={{
+          title: 'Videos',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="🎥" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
         name="lessons"
         options={{ href: null }}
       />
