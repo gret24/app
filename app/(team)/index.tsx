@@ -8,6 +8,9 @@ import { Colors } from '../../constants/Colors';
 
 type TeamSide = 'HOME' | 'AWAY';
 type TeamMenu = 'tactics' | 'recommendation' | 'players';
+type Position = 'ALL' | 'LW' | 'RW' | 'C' | 'D' | 'G';
+type SpeedFilter = 'ALL' | 'fast' | 'normal' | 'slow';
+type AgeFilter = 'ALL' | 'U18' | '18-25' | '26-32' | '33+';
 
 interface PlayerStats {
   jersey: string;
@@ -15,6 +18,9 @@ interface PlayerStats {
   total_ice_time_min: number;
   total_shifts: number;
   total_ice_time_sec: number;
+  position: Exclude<Position, 'ALL'>;
+  age: number;
+  shoot: 'L' | 'R';  // 레프트/라이트
 }
 
 const MOCK_VIDEOS = [
@@ -25,24 +31,38 @@ const MOCK_VIDEOS = [
 
 const MOCK_PLAYERS: Record<string, PlayerStats[]> = {
   game1_val: [
-    { jersey: '91', team: 'HOME', total_ice_time_min: 37.4, total_shifts: 3,  total_ice_time_sec: 2244 },
-    { jersey: '24', team: 'HOME', total_ice_time_min: 25.9, total_shifts: 21, total_ice_time_sec: 1554 },
-    { jersey: '96', team: 'HOME', total_ice_time_min: 30.2, total_shifts: 18, total_ice_time_sec: 1812 },
-    { jersey: '2',  team: 'HOME', total_ice_time_min: 20.7, total_shifts: 18, total_ice_time_sec: 1242 },
-    { jersey: '21', team: 'HOME', total_ice_time_min: 24.6, total_shifts: 22, total_ice_time_sec: 1476 },
-    { jersey: '5',  team: 'AWAY', total_ice_time_min: 18.0, total_shifts: 25, total_ice_time_sec: 1080 },
-    { jersey: '91', team: 'AWAY', total_ice_time_min: 39.2, total_shifts: 2,  total_ice_time_sec: 2352 },
-    { jersey: '24', team: 'AWAY', total_ice_time_min: 38.0, total_shifts: 7,  total_ice_time_sec: 2280 },
-    { jersey: '96', team: 'AWAY', total_ice_time_min: 16.1, total_shifts: 26, total_ice_time_sec: 966 },
+    { jersey: '91', team: 'HOME', total_ice_time_min: 37.4, total_shifts: 3,  total_ice_time_sec: 2244, position: 'C',  age: 28, shoot: 'L' },
+    { jersey: '24', team: 'HOME', total_ice_time_min: 25.9, total_shifts: 21, total_ice_time_sec: 1554, position: 'LW', age: 22, shoot: 'L' },
+    { jersey: '96', team: 'HOME', total_ice_time_min: 30.2, total_shifts: 18, total_ice_time_sec: 1812, position: 'D',  age: 31, shoot: 'R' },
+    { jersey: '2',  team: 'HOME', total_ice_time_min: 20.7, total_shifts: 18, total_ice_time_sec: 1242, position: 'D',  age: 26, shoot: 'R' },
+    { jersey: '21', team: 'HOME', total_ice_time_min: 24.6, total_shifts: 22, total_ice_time_sec: 1476, position: 'RW', age: 19, shoot: 'R' },
+    { jersey: '5',  team: 'AWAY', total_ice_time_min: 18.0, total_shifts: 25, total_ice_time_sec: 1080, position: 'LW', age: 24, shoot: 'L' },
+    { jersey: '91', team: 'AWAY', total_ice_time_min: 39.2, total_shifts: 2,  total_ice_time_sec: 2352, position: 'G',  age: 34, shoot: 'L' },
+    { jersey: '24', team: 'AWAY', total_ice_time_min: 38.0, total_shifts: 7,  total_ice_time_sec: 2280, position: 'C',  age: 29, shoot: 'R' },
+    { jersey: '96', team: 'AWAY', total_ice_time_min: 16.1, total_shifts: 26, total_ice_time_sec: 966,  position: 'RW', age: 17, shoot: 'L' },
   ],
   game2_4fps: [
-    { jersey: '19', team: 'AWAY', total_ice_time_min: 8.1,  total_shifts: 11, total_ice_time_sec: 486 },
-    { jersey: '40', team: 'HOME', total_ice_time_min: 12.3, total_shifts: 15, total_ice_time_sec: 738 },
-    { jersey: '89', team: 'AWAY', total_ice_time_min: 6.5,  total_shifts: 8,  total_ice_time_sec: 390 },
+    { jersey: '19', team: 'AWAY', total_ice_time_min: 8.1,  total_shifts: 11, total_ice_time_sec: 486,  position: 'C',  age: 23, shoot: 'L' },
+    { jersey: '40', team: 'HOME', total_ice_time_min: 12.3, total_shifts: 15, total_ice_time_sec: 738,  position: 'D',  age: 27, shoot: 'R' },
+    { jersey: '89', team: 'AWAY', total_ice_time_min: 6.5,  total_shifts: 8,  total_ice_time_sec: 390,  position: 'LW', age: 20, shoot: 'L' },
   ],
   aigis_g18: [
-    { jersey: '47', team: 'HOME', total_ice_time_min: 24.9, total_shifts: 41, total_ice_time_sec: 1494 },
+    { jersey: '47', team: 'HOME', total_ice_time_min: 24.9, total_shifts: 41, total_ice_time_sec: 1494, position: 'RW', age: 25, shoot: 'R' },
   ],
+};
+
+// 속도 분류 (평균 시프트 길이 기준)
+const getSpeed = (p: PlayerStats): 'fast' | 'normal' | 'slow' => {
+  const avg = p.total_ice_time_sec / p.total_shifts;
+  if (avg < 40) return 'fast';
+  if (avg < 90) return 'normal';
+  return 'slow';
+};
+const getAgeGroup = (age: number): '18-25' | '26-32' | '33+' | 'U18' => {
+  if (age < 18) return 'U18';
+  if (age <= 25) return '18-25';
+  if (age <= 32) return '26-32';
+  return '33+';
 };
 
 // 모의 전술 데이터
@@ -87,10 +107,16 @@ export default function TeamScreen() {
   const [selectedTeam, setSelectedTeam] = useState<TeamSide>('HOME');
   const [activeMenu, setActiveMenu] = useState<TeamMenu>('tactics');
   const [step, setStep] = useState<1 | 2>(1);
+  const [posFilter, setPosFilter] = useState<Position>('ALL');
+  const [speedFilter, setSpeedFilter] = useState<SpeedFilter>('ALL');
+  const [ageFilter, setAgeFilter] = useState<AgeFilter>('ALL');
 
   const players = selectedVideo ? (MOCK_PLAYERS[selectedVideo.id] || []) : [];
   const teamPlayers = players
     .filter(p => p.team === selectedTeam)
+    .filter(p => posFilter === 'ALL' || p.position === posFilter)
+    .filter(p => speedFilter === 'ALL' || getSpeed(p) === speedFilter)
+    .filter(p => ageFilter === 'ALL' || getAgeGroup(p.age) === ageFilter)
     .sort((a, b) => b.total_ice_time_min - a.total_ice_time_min);
   const maxIce = teamPlayers[0]?.total_ice_time_min || 1;
 
@@ -253,8 +279,49 @@ export default function TeamScreen() {
           {activeMenu === 'players' && (
             <View style={styles.section}>
               <Text style={styles.sectionLabel}>
-                {selectedTeam === 'HOME' ? '홈팀' : '어웨이팀'} 선수 아이스타임 ({teamPlayers.length}명)
+                {selectedTeam === 'HOME' ? '홈팀' : '어웨이팀'} 선수 분석
               </Text>
+
+              {/* 포지션 필터 */}
+              <Text style={styles.filterLabel}>포지션</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 10 }}>
+                <View style={styles.filterRow}>
+                  {(['ALL','LW','RW','C','D','G'] as Position[]).map(pos => (
+                    <Pressable key={pos} style={[styles.filterChip, posFilter===pos && styles.filterChipActive]} onPress={() => setPosFilter(pos)}>
+                      <Text style={[styles.filterChipText, posFilter===pos && styles.filterChipTextActive]}>
+                        {pos === 'ALL' ? '전체' : pos === 'LW' ? '🏒L 레프트윙' : pos === 'RW' ? '🏒R 라이트윙' : pos === 'C' ? '🎯 센터' : pos === 'D' ? '🛡️ 수비' : '🥅 골리'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </ScrollView>
+
+              {/* 속도 필터 */}
+              <Text style={styles.filterLabel}>속도</Text>
+              <View style={[styles.filterRow, { marginBottom: 10 }]}>
+                {(['ALL','fast','normal','slow'] as SpeedFilter[]).map(s => (
+                  <Pressable key={s} style={[styles.filterChip, speedFilter===s && styles.filterChipActive]} onPress={() => setSpeedFilter(s)}>
+                    <Text style={[styles.filterChipText, speedFilter===s && styles.filterChipTextActive]}>
+                      {s==='ALL'?'전체': s==='fast'?'⚡ 빠름': s==='normal'?'🚶 보통':'🐢 느림'}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              {/* 나이대 필터 */}
+              <Text style={styles.filterLabel}>나이대</Text>
+              <View style={[styles.filterRow, { marginBottom: 16 }]}>
+                {(['ALL','U18','18-25','26-32','33+'] as AgeFilter[]).map(a => (
+                  <Pressable key={a} style={[styles.filterChip, ageFilter===a && styles.filterChipActive]} onPress={() => setAgeFilter(a)}>
+                    <Text style={[styles.filterChipText, ageFilter===a && styles.filterChipTextActive]}>
+                      {a==='ALL'?'전체': a==='U18'?'~17세': a==='18-25'?'18~25세': a==='26-32'?'26~32세':'33세~'}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+
+              <Text style={styles.resultCount}>{teamPlayers.length}명 해당</Text>
+
               {teamPlayers.length === 0 ? (
                 <View style={styles.emptyCard}>
                   <Text style={styles.emptyText}>이 경기에 감지된 선수 없음</Text>
@@ -267,11 +334,23 @@ export default function TeamScreen() {
                         <Text style={styles.jerseyNum}>#{p.jersey}</Text>
                       </View>
                       <View style={{ flex: 1, gap: 4 }}>
+                        <View style={styles.playerTagRow}>
+                          <View style={styles.posBadge}><Text style={styles.posBadgeText}>{p.position}</Text></View>
+                          <View style={[styles.shootBadge, { backgroundColor: p.shoot === 'L' ? '#00D4FF22' : '#FF664422' }]}>
+                            <Text style={[styles.shootText, { color: p.shoot === 'L' ? Colors.accent : '#FF6644' }]}>{p.shoot === 'L' ? '레프트' : '라이트'}</Text>
+                          </View>
+                          <Text style={styles.ageText}>{p.age}세</Text>
+                          <View style={[styles.speedBadge, { backgroundColor: getSpeed(p) === 'fast' ? '#00FF8822' : getSpeed(p) === 'normal' ? '#FFD70022' : '#88888822' }]}>
+                            <Text style={[styles.speedText, { color: getSpeed(p) === 'fast' ? '#00CC66' : getSpeed(p) === 'normal' ? '#FFD700' : '#888' }]}>
+                              {getSpeed(p) === 'fast' ? '⚡빠름' : getSpeed(p) === 'normal' ? '🚶보통' : '🐢느림'}
+                            </Text>
+                          </View>
+                        </View>
                         <View style={styles.iceBarBg}>
                           <View style={[styles.iceBarFill, { width: `${p.total_ice_time_min / maxIce * 100}%` as any }]} />
                         </View>
                         <Text style={styles.playerStats}>
-                          {p.total_ice_time_min.toFixed(1)}분 · {p.total_shifts}시프트 · 평균 {(p.total_ice_time_sec / p.total_shifts / 60).toFixed(1)}분
+                          {p.total_ice_time_min.toFixed(1)}분 · {p.total_shifts}시프트
                         </Text>
                       </View>
                       <Text style={styles.iceTimeVal}>{p.total_ice_time_min.toFixed(1)}분</Text>
@@ -355,6 +434,23 @@ const styles = StyleSheet.create({
   recBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 2 },
   recBadgeText: { fontSize: 10, fontWeight: '700' },
   recDesc: { fontSize: 12, color: Colors.subtext, lineHeight: 18 },
+  // 필터
+  filterLabel: { fontSize: 11, fontWeight: '700', color: Colors.subtext, letterSpacing: 0.5, marginBottom: 6, textTransform: 'uppercase' },
+  filterRow: { flexDirection: 'row', gap: 6, flexWrap: 'wrap' },
+  filterChip: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border },
+  filterChipActive: { borderColor: Colors.accent, backgroundColor: Colors.accent + '22' },
+  filterChipText: { fontSize: 12, color: Colors.subtext, fontWeight: '600' },
+  filterChipTextActive: { color: Colors.accent },
+  resultCount: { fontSize: 12, color: Colors.subtext, marginBottom: 10 },
+  // 선수 태그
+  playerTagRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  posBadge: { backgroundColor: Colors.input, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  posBadgeText: { fontSize: 10, fontWeight: '800', color: Colors.text },
+  shootBadge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  shootText: { fontSize: 10, fontWeight: '700' },
+  ageText: { fontSize: 10, color: Colors.subtext },
+  speedBadge: { borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  speedText: { fontSize: 10, fontWeight: '700' },
   // 선수 분석
   playerList: { gap: 8 },
   playerRow: { flexDirection: 'row', backgroundColor: Colors.card, borderRadius: 12, padding: 12, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', gap: 10 },
