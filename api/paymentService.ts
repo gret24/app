@@ -1,7 +1,7 @@
 import { apiPost } from './client';
 import * as WebBrowser from 'expo-web-browser';
 
-export type Plan = 'starter' | 'pro' | 'team';
+export type Plan = 'free' | 'starter' | 'pro' | 'team';
 
 export interface CheckoutResult {
   checkout_url: string;
