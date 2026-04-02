@@ -34,8 +34,15 @@ interface SubscriptionContextType {
 
 const SubscriptionContext = createContext<SubscriptionContextType | null>(null);
 
+// 어드민 계정 — 항상 Team 플랜
+const ADMIN_EMAILS = ['hshan16hhs@gmail.com'];
+
 export function SubscriptionProvider({ children }: { children: React.ReactNode }) {
   const [plan, setPlan] = useState<Plan>('free');
+  const { user } = require('./AuthContext').useAuth();
+
+  // 어드민 이메일이면 Team 자동 부여
+  const effectivePlan: Plan = user?.email && ADMIN_EMAILS.includes(user.email) ? 'team' : plan;
 
   const upgrade = async (newPlan: Plan) => {
     // Mock upgrade - replace with real payment flow
@@ -46,9 +53,9 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   return (
     <SubscriptionContext.Provider
       value={{
-        plan,
-        isPro: plan === 'pro' || plan === 'team',
-        isTeam: plan === 'team',
+        plan: effectivePlan,
+        isPro: effectivePlan === 'pro' || effectivePlan === 'team',
+        isTeam: effectivePlan === 'team',
         upgrade,
       }}
     >
