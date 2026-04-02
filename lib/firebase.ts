@@ -27,13 +27,38 @@ export const db = getFirestore(app);
 import {
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithCredential,
 } from 'firebase/auth';
+import { Platform } from 'react-native';
 
 export const googleProvider = new GoogleAuthProvider();
 
+const WEB_CLIENT_ID = '99041784463-2l9jdn499hrvi0jsuqdictiqeqcr300d.apps.googleusercontent.com';
+
+// 앱 시작 시 1회 호출
+export const configureGoogleSignin = () => {
+  if (Platform.OS !== 'web') {
+    try {
+      const { GoogleSignin } = require('@react-native-google-signin/google-signin');
+      GoogleSignin.configure({ webClientId: WEB_CLIENT_ID });
+    } catch (_) {}
+  }
+};
+
 export const signInWithGoogle = async () => {
-  const result = await signInWithPopup(auth, googleProvider);
-  return result.user;
+  if (Platform.OS === 'web') {
+    // 웹: 팝업 방식
+    const result = await signInWithPopup(auth, googleProvider);
+    return result.user;
+  } else {
+    // 네이티브 앱: GoogleSignin 방식
+    const { GoogleSignin } = require('@react-native-google-signin/google-signin');
+    await GoogleSignin.hasPlayServices();
+    const { idToken } = await GoogleSignin.signIn();
+    const credential = GoogleAuthProvider.credential(idToken);
+    const result = await signInWithCredential(auth, credential);
+    return result.user;
+  }
 };
 
 export {
