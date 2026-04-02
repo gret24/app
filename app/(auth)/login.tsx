@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
+import { signInWithGoogle } from '../../lib/firebase';
 import { Colors } from '../../constants/Colors';
 
 export default function LoginScreen() {
@@ -84,7 +85,17 @@ export default function LoginScreen() {
             <View style={styles.divLine} />
           </View>
 
-          <Pressable style={({ pressed }) => [styles.googleBtn, pressed && { opacity: 0.8 }]}>
+          <Pressable
+            style={({ pressed }) => [styles.googleBtn, pressed && { opacity: 0.8 }]}
+            onPress={async () => {
+              try {
+                await signInWithGoogle();
+                router.replace('/(tabs)');
+              } catch (e: any) {
+                Alert.alert('Google 로그인 실패', e.message);
+              }
+            }}
+          >
             <Text style={styles.googleText}>🔵  Continue with Google</Text>
           </Pressable>
         </View>
