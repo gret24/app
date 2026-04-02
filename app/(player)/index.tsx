@@ -1,21 +1,28 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  Alert, ActivityIndicator, TextInput, Animated, Modal,
+  Alert, ActivityIndicator, TextInput, Animated, Modal, Dimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/Colors';
 import { useRoster } from '../../contexts/RosterContext';
 import PlayerForm from '../../components/PlayerForm';
 import IceTimeDiagram from '../../components/IceTimeDiagram';
+import PlayerTracker, { TeamRosterList } from '../../components/PlayerTracker';
+import { RinkSVG } from '../../components/TacticsAnimator';
+import { getAllTracks, getAllPlayersAtTime } from '../../api/trackingService';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadAndAnalyze, waitForAnalysis, getPlayers, getReport } from '../../api/analysisService';
 import { generateHighlight, getVideoStreamUrl } from '../../api/highlightService';
 import { apiPost } from '../../api/client';
 import { API_BASE_URL } from '../../api/config';
-import { Video, ResizeMode } from 'expo-av';
+import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { useAuth } from '../../contexts/AuthContext';
 import { addGame, getGames, updateGame, type GameRecord } from '../../api/gamesService';
+
+const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
+type ViewMode = 'video' | 'diagram';
+type LabelFilter = 'ALL' | 'HOME' | 'AWAY' | 'OFF';
 
 type AppStep = 'input' | 'analyzing' | 'select_player' | 'select_option';
 type VideoType = 'highlight' | 'fulltime' | 'shifts';
@@ -74,6 +81,11 @@ export default function PlayerAnalysisScreen() {
   // 비디오 플레이어
   const [playerUrl, setPlayerUrl] = useState<string | null>(null);
   const [showPlayer, setShowPlayer] = useState(false);
+  // View mode toggle (video ↔ diagram)
+  const [viewMode, setViewMode] = useState<ViewMode>('video');
+  const [playbackTimeMs, setPlaybackTimeMs] = useState(0);
+  const [labelFilter, setLabelFilter] = useState<LabelFilter>('ALL');
+  const [diagramDetections, setDiagramDetections] = useState<any[]>([]);
 
   // 게임 목록 로드
   useEffect(() => {
@@ -471,30 +483,124 @@ export default function PlayerAnalysisScreen() {
     {/* 인앱 비디오 플레이어 모달 */}
     <Modal visible={showPlayer} animationType="slide" statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: '#000' }}>
+        {/* Header */}
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: 56 }}>
-          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
-            {videoType === 'fulltime' ? '🏒 풀게임' : videoType === 'highlight' ? '🎬 하이라이트' : '⏱️ 아이스타임'}
-            {' '}— #{selectedPlayer?.jersey}
+          <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700', flex: 1 }}>
+            {videoType === 'fulltime' ? '🏒 풀게임' : '🎬 하이라이트'} — #{selectedPlayer?.jersey}
           </Text>
+          {/* Video ↔ Diagram toggle (only when videoStem is set) */}
+          {!!videoStem && (
+            <View style={{ flexDirection: 'row', backgroundColor: '#1a1a2e', borderRadius: 10, overflow: 'hidden', marginRight: 8 }}>
+              <Pressable
+                style={{ paddingHorizontal: 10, paddingVertical: 6, backgroundColor: viewMode === 'video' ? Colors.accent : 'transparent' }}
+                onPress={() => setViewMode('video')}
+              >
+                <Text style={{ color: viewMode === 'video' ? '#000' : '#888', fontSize: 12, fontWeight: '700' }}>📹 Video</Text>
+              </Pressable>
+              <Pressable
+                style={{ paddingHorizontal: 10, paddingVertical: 6, backgroundColor: viewMode === 'diagram' ? Colors.accent : 'transparent' }}
+                onPress={() => setViewMode('diagram')}
+              >
+                <Text style={{ color: viewMode === 'diagram' ? '#000' : '#888', fontSize: 12, fontWeight: '700' }}>🗺 Diagram</Text>
+              </Pressable>
+            </View>
+          )}
           <Pressable onPress={() => setShowPlayer(false)} style={{ padding: 8 }}>
             <Text style={{ color: '#fff', fontSize: 22 }}>✕</Text>
           </Pressable>
         </View>
-        {playerUrl ? (
-          <Video
-            source={{ uri: playerUrl }}
-            style={{ width: '100%', flex: 1 }}
-            resizeMode={ResizeMode.CONTAIN}
-            shouldPlay
-            useNativeControls
-            onError={(e) => Alert.alert('재생 오류', String(e))}
-          />
-        ) : (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <ActivityIndicator color={Colors.accent} size="large" />
-            <Text style={{ color: Colors.subtext, marginTop: 12 }}>영상 로딩 중...</Text>
-          </View>
-        )}
+
+        {/* Content area */}
+        <View style={{ flex: 1, position: 'relative' }}>
+          {viewMode === 'video' ? (
+            /* ── VIDEO VIEW ── */
+            <>
+              {playerUrl ? (
+                <View style={{ flex: 1 }}>
+                  <Video
+                    source={{ uri: playerUrl }}
+                    style={{ width: '100%', flex: 1 }}
+                    resizeMode={ResizeMode.CONTAIN}
+                    shouldPlay
+                    useNativeControls
+                    onError={(e) => Alert.alert('재생 오류', String(e))}
+                    onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
+                      if (status.isLoaded) setPlaybackTimeMs(status.positionMillis ?? 0);
+                    }}
+                  />
+                  {/* Player Tracker overlay on video */}
+                  {!!videoStem && (
+                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} pointerEvents="none">
+                      <PlayerTracker
+                        videoStem={videoStem}
+                        currentTimeMs={playbackTimeMs}
+                        videoWidth={1920}
+                        videoHeight={1080}
+                        playerWidth={SCREEN_W}
+                        playerHeight={SCREEN_H - 200}
+                        fps={4}
+                        showLabels={labelFilter}
+                      />
+                    </View>
+                  )}
+                </View>
+              ) : (
+                <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+                  <ActivityIndicator color={Colors.accent} size="large" />
+                  <Text style={{ color: Colors.subtext, marginTop: 12 }}>영상 로딩 중...</Text>
+                </View>
+              )}
+              {/* Label filter row */}
+              {!!videoStem && (
+                <View style={{ flexDirection: 'row', gap: 6, padding: 8, backgroundColor: '#0a0a0f' }}>
+                  {(['ALL', 'HOME', 'AWAY', 'OFF'] as LabelFilter[]).map(f => (
+                    <Pressable
+                      key={f}
+                      style={{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: labelFilter === f ? Colors.accent : '#1a1a2e', borderWidth: 1, borderColor: labelFilter === f ? Colors.accent : '#333355' }}
+                      onPress={() => setLabelFilter(f)}
+                    >
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: labelFilter === f ? '#000' : '#888' }}>
+                        {f === 'ALL' ? '전체' : f === 'HOME' ? '🏠 홈' : f === 'AWAY' ? '✈️ 어웨이' : '숨기기'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </>
+          ) : (
+            /* ── DIAGRAM VIEW ── */
+            <View style={{ flex: 1, backgroundColor: '#0D1B2A', position: 'relative' }}>
+              {/* Rink SVG */}
+              <View style={{ flex: 1, position: 'relative' }}>
+                <RinkSVG />
+                {/* Player Tracker as overlay on rink */}
+                {!!videoStem && (
+                  <PlayerTracker
+                    videoStem={videoStem}
+                    currentTimeMs={playbackTimeMs}
+                    videoWidth={200}
+                    videoHeight={85}
+                    playerWidth={SCREEN_W}
+                    playerHeight={SCREEN_H - 260}
+                    fps={4}
+                    showLabels="ALL"
+                  />
+                )}
+                {/* Roster lists */}
+                {!!videoStem && diagramDetections.length > 0 && (
+                  <>
+                    <TeamRosterList detections={diagramDetections} team="HOME" side="left" />
+                    <TeamRosterList detections={diagramDetections} team="AWAY" side="right" />
+                  </>
+                )}
+              </View>
+              <Text style={{ color: '#4a7aa0', fontSize: 11, textAlign: 'center', paddingVertical: 8 }}>
+                🗺 Tactical Diagram View — #{selectedPlayer?.jersey} @ {(playbackTimeMs / 1000).toFixed(1)}s
+              </Text>
+            </View>
+          )}
+        </View>
+
         {/* 영상 타입 전환 탭 */}
         <View style={{ flexDirection: 'row', backgroundColor: '#111', paddingBottom: 32 }}>
           {[

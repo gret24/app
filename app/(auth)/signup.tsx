@@ -129,7 +129,7 @@ export default function SignUpScreen() {
                       )}
                     </View>
                     <Text style={[styles.planPrice, isSelected && styles.planPriceSelected]}>
-                      {details.price === 0 ? 'Free' : `$${details.price}/mo`}
+                      {details.price === '0' || Number(details.price) === 0 ? 'Free' : `$${details.price}/mo`}
                     </Text>
                     {details.features.slice(0, 2).map((f) => (
                       <Text key={f} style={styles.planFeature}>· {f}</Text>

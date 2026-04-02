@@ -7,6 +7,8 @@ import { useRouter } from 'expo-router';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { Colors } from '../../constants/Colors';
 import IceTimeDiagram from '../../components/IceTimeDiagram';
+import TacticsAnimator from '../../components/TacticsAnimator';
+import { CURRICULUM, LEVELS, getWeekStates, overallProgress, type PlanTier } from '../../tactics/curriculum';
 
 // mock 레슨 데이터
 const LESSONS = [
@@ -33,13 +35,143 @@ interface AnalysisResult {
 }
 
 type Step = 'input' | 'analyzing' | 'result';
+type MainTab = 'video' | 'tactics';
 
+// ─── Tactics Tab ─────────────────────────────────────────────────────────────
+type LevelKey = 'Beginner' | 'Intermediate' | 'Advanced';
+
+function TacticsTab({ plan }: { plan: PlanTier }) {
+  const [scores] = useState<Record<number, number>>({
+    1: 90, 2: 85, // mock: weeks 1-2 done
+  });
+  const [expandedLevel, setExpandedLevel] = useState<LevelKey | null>('Beginner');
+  const [activeTacticId, setActiveTacticId] = useState<string | null>(null);
+  const [activeWeek, setActiveWeek] = useState<number | null>(null);
+
+  const weekStates = getWeekStates(scores, plan);
+  const progress = overallProgress(scores);
+
+  if (activeTacticId && activeWeek !== null) {
+    const week = CURRICULUM.find(w => w.weekNumber === activeWeek);
+    return (
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 12 }}>
+        <Pressable
+          onPress={() => { setActiveTacticId(null); setActiveWeek(null); }}
+          style={ts.backRow}
+        >
+          <Text style={ts.backBtn}>← 커리큘럼으로</Text>
+        </Pressable>
+        <Text style={ts.weekTitle}>Week {activeWeek}: {week?.title}</Text>
+        <Text style={ts.weekDesc}>{week?.description}</Text>
+        <TacticsAnimator tacticId={activeTacticId} autoPlay compact />
+        <View style={{ height: 40 }} />
+      </ScrollView>
+    );
+  }
+
+  return (
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, gap: 14 }}>
+      {/* Progress bar */}
+      <View style={ts.progressCard}>
+        <View style={ts.progressHeader}>
+          <Text style={ts.progressLabel}>전체 진행도</Text>
+          <Text style={ts.progressPct}>{progress}%</Text>
+        </View>
+        <View style={ts.barBg}>
+          <View style={[ts.barFill, { width: `${progress}%` }]} />
+        </View>
+        <Text style={ts.progressSub}>
+          {Object.keys(scores).length} / {CURRICULUM.length}주 완료
+        </Text>
+      </View>
+
+      {/* Level cards */}
+      {LEVELS.map(({ level, weekRange, emoji }) => {
+        const levelWeeks = weekStates.filter(
+          ws => ws.week.weekNumber >= weekRange[0] && ws.week.weekNumber <= weekRange[1]
+        );
+        const doneCount = levelWeeks.filter(ws => ws.completed).length;
+        const isExpanded = expandedLevel === level;
+
+        return (
+          <View key={level} style={ts.levelCard}>
+            <Pressable
+              style={ts.levelHeader}
+              onPress={() => setExpandedLevel(isExpanded ? null : level)}
+            >
+              <Text style={ts.levelEmoji}>{emoji}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={ts.levelTitle}>{level}</Text>
+                <Text style={ts.levelMeta}>
+                  {doneCount}/{levelWeeks.length}주 완료 · Week {weekRange[0]}–{weekRange[1]}
+                </Text>
+              </View>
+              <Text style={ts.chevron}>{isExpanded ? '▲' : '▼'}</Text>
+            </Pressable>
+
+            {isExpanded && (
+              <View style={ts.weekList}>
+                {levelWeeks.map(({ week, locked, completed }) => {
+                  const firstLesson = week.lessons.find(l => l.type === 'animation');
+                  return (
+                    <Pressable
+                      key={week.weekNumber}
+                      style={[ts.weekRow, locked && ts.weekRowLocked]}
+                      onPress={() => {
+                        if (locked) {
+                          Alert.alert(
+                            '잠금',
+                            week.planGate === plan
+                              ? `이전 주 점수 80점 이상이 필요합니다.`
+                              : `${week.planGate.toUpperCase()} 플랜 이상이 필요합니다.`
+                          );
+                          return;
+                        }
+                        if (firstLesson) {
+                          setActiveTacticId(firstLesson.contentId);
+                          setActiveWeek(week.weekNumber);
+                        }
+                      }}
+                    >
+                      <View style={ts.weekIconWrap}>
+                        {locked
+                          ? <Text style={ts.lockIcon}>🔒</Text>
+                          : completed
+                          ? <Text style={ts.checkIcon}>✅</Text>
+                          : <Text style={ts.weekNumText}>{week.weekNumber}</Text>}
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[ts.weekTitle2, locked && { color: Colors.subtext }]}>
+                          Week {week.weekNumber}: {week.title}
+                        </Text>
+                        <Text style={ts.weekCategory}>
+                          {week.category.toUpperCase()} · {week.lessons.length}개 레슨
+                        </Text>
+                      </View>
+                      {!locked && (
+                        <Text style={{ color: Colors.accent, fontSize: 16 }}>›</Text>
+                      )}
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        );
+      })}
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+}
+
+// ─── Main Screen ─────────────────────────────────────────────────────────────
 export default function VideoLessonsScreen() {
   const router = useRouter();
   const { plan, isPro, checkLimit, recordGame } = useSubscription();
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [limitInfo, setLimitInfo] = useState({ used: 0, limit: 0 });
-  const [mainTab, setMainTab] = useState<'library' | 'analyze'>('library');
+  const [mainTab, setMainTab] = useState<MainTab>('video');
+  const [videoSubTab, setVideoSubTab] = useState<'library' | 'analyze'>('library');
   const [step, setStep]               = useState<Step>('input');
   const [url, setUrl]                 = useState('');
   const [progress, setProgress]       = useState(0);
@@ -58,75 +190,49 @@ export default function VideoLessonsScreen() {
     setProgress(to);
   };
 
-  // 경기 제한 체크 후 분석 시작
   const startWithLimitCheck = async () => {
     const { allowed, used, limit } = await checkLimit();
-    if (!allowed) {
-      setLimitInfo({ used, limit });
-      setShowLimitModal(true);
-      return;
-    }
+    if (!allowed) { setLimitInfo({ used, limit }); setShowLimitModal(true); return; }
     startAnalysis();
   };
 
-  // 갤러리에서 영상 선택
   const pickVideo = async () => {
     const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!perm.granted) { Alert.alert('권한 필요', '갤러리 접근 권한이 필요해요'); return; }
     const res = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Videos,
-      quality: 1,
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos, quality: 1,
     });
-    if (!res.canceled && res.assets[0]) {
-      setUrl(res.assets[0].uri);
-    }
+    if (!res.canceled && res.assets[0]) setUrl(res.assets[0].uri);
   };
 
-  // 분석 시작 (실제 API + mock 폴백)
   const startAnalysis = async () => {
     const input = url.trim();
     if (!input) { Alert.alert('오류', '영상 경로 또는 URL을 입력해주세요'); return; }
-
-    setStep('analyzing');
-    animateProgress(5);
-    setProgressMsg('업로드 중...');
-
+    setStep('analyzing'); animateProgress(5); setProgressMsg('업로드 중...');
     try {
-      // 파일 URI면 업로드, 아니면 경로 기반 분석
       let job_id: string, video_stem: string;
       if (input.startsWith('file://') || input.startsWith('/')) {
-        setProgressMsg('서버에 업로드 중...');
-        animateProgress(10);
+        setProgressMsg('서버에 업로드 중...'); animateProgress(10);
         const filename = input.split('/').pop() || 'video.mp4';
         const res = await uploadAndAnalyze(input, filename, { fps: 4 });
         job_id = res.job_id; video_stem = res.video_stem;
       } else {
-        // 경로 기반 (서버에 이미 있는 영상)
         const { apiPost } = await import('../../api/client');
         const res = await apiPost<any>('/analyze', { video_path: input, fps: 4 });
         job_id = res.job_id; video_stem = res.video_stem;
       }
-
-      setProgressMsg('AI 분석 중...');
-      animateProgress(20);
-
-      // 폴링으로 진행 상황 확인
+      setProgressMsg('AI 분석 중...'); animateProgress(20);
       waitForAnalysis(job_id, (status) => {
         setProgressMsg(status.message);
         animateProgress(Math.max(20, Math.min(95, status.progress)));
       }).then(async () => {
-        animateProgress(100);
-        setProgressMsg('완료!');
-        await recordGame(); // 분석 횟수 증가
+        animateProgress(100); setProgressMsg('완료!');
+        await recordGame();
         await loadResults(video_stem);
       }).catch(() => loadMockResults());
-
-    } catch {
-      simulateMockAnalysis();
-    }
+    } catch { simulateMockAnalysis(); }
   };
 
-  // mock 분석 시뮬레이션 (API 없을 때)
   const simulateMockAnalysis = () => {
     const steps = [
       { msg: '프레임 추출 중... (4fps)', pct: 20, delay: 800 },
@@ -140,8 +246,7 @@ export default function VideoLessonsScreen() {
     steps.forEach(({ msg, pct, delay }) => {
       total += delay;
       setTimeout(() => {
-        setProgressMsg(msg);
-        animateProgress(pct);
+        setProgressMsg(msg); animateProgress(pct);
         if (pct === 100) loadMockResults();
       }, total);
     });
@@ -151,25 +256,19 @@ export default function VideoLessonsScreen() {
     try {
       const data = await getReport(video_stem);
       setResult({
-        job_id: '',
-        video_stem,
+        job_id: '', video_stem,
         players: (data.players ?? []).slice(0, 12).map(p => ({
-          jersey: p.jersey,
-          team: p.team,
-          total_ice_time_min: p.total_ice_time_min,
-          total_shifts: p.total_shifts,
+          jersey: p.jersey, team: p.team,
+          total_ice_time_min: p.total_ice_time_min, total_shifts: p.total_shifts,
         })),
       });
       setStep('result');
-    } catch {
-      await loadMockResults();
-    }
+    } catch { await loadMockResults(); }
   };
 
   const loadMockResults = async () => {
     setResult({
-      job_id: 'mock',
-      video_stem: 'demo_video',
+      job_id: 'mock', video_stem: 'demo_video',
       players: [
         { jersey: '91', team: 'HOME', total_ice_time_min: 37.4, total_shifts: 3  },
         { jersey: '24', team: 'HOME', total_ice_time_min: 25.9, total_shifts: 21 },
@@ -182,9 +281,7 @@ export default function VideoLessonsScreen() {
   };
 
   const loadPlayerShifts = (jersey: string) => {
-    setSelectedJersey(jersey);
-    setLoadingShifts(true);
-    // mock 시프트 데이터
+    setSelectedJersey(jersey); setLoadingShifts(true);
     setTimeout(() => {
       setPlayerShifts([
         { shift_number: 1, start_time: 109,  end_time: 121,  duration: 12 },
@@ -208,9 +305,6 @@ export default function VideoLessonsScreen() {
 
   const barWidth = progressAnim.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] });
 
-  // ── STEP 1: 입력 ──────────────────────────────────────────
-  // Pro 잠금 화면
-  // 경기 제한 모달
   const LimitModal = () => (
     <Modal visible={showLimitModal} transparent animationType="fade">
       <View style={{ flex:1, backgroundColor:'#000000CC', justifyContent:'center', alignItems:'center', padding:24 }}>
@@ -218,12 +312,8 @@ export default function VideoLessonsScreen() {
           <Text style={{ fontSize:36, textAlign:'center' }}>⛔</Text>
           <Text style={{ fontSize:18, fontWeight:'800', color:Colors.text, textAlign:'center' }}>이번 달 제한 초과</Text>
           <Text style={{ fontSize:14, color:Colors.subtext, textAlign:'center', lineHeight:22 }}>
-            {`이번 달 무료 분석 ${limitInfo.limit}회를 모두 사용했어요.\nStarter 플랜으로 업그레이드하면 월 8경기까지 분석할 수 있어요.`}
+            {`이번 달 무료 분석 ${limitInfo.limit}회를 모두 사용했어요.`}
           </Text>
-          <View style={{ backgroundColor:Colors.input, borderRadius:12, padding:14, gap:4 }}>
-            <Text style={{ fontSize:12, color:Colors.subtext }}>현재 사용량</Text>
-            <Text style={{ fontSize:20, fontWeight:'800', color:Colors.accent }}>{limitInfo.used} / {limitInfo.limit}회</Text>
-          </View>
           <Pressable style={{ height:48, borderRadius:12, backgroundColor:Colors.accent, justifyContent:'center', alignItems:'center' }}
             onPress={() => setShowLimitModal(false)}>
             <Text style={{ color:Colors.bg, fontWeight:'700', fontSize:15 }}>업그레이드 알아보기</Text>
@@ -242,29 +332,9 @@ export default function VideoLessonsScreen() {
       <Text style={{ fontSize: 56, marginBottom: 16 }}>🔒</Text>
       <Text style={{ fontSize: 22, fontWeight: '800', color: Colors.text, marginBottom: 10 }}>Pro 이상 전용</Text>
       <Text style={{ fontSize: 14, color: Colors.subtext, textAlign: 'center', lineHeight: 22, marginBottom: 28 }}>
-        영상 레슨, 드로잉 분석, 영상 업로드 기능은{'\n'}
+        영상 레슨, 드로잉 분석, 전술 커리큘럼은{'\n'}
         <Text style={{ color: Colors.accent, fontWeight: '700' }}>Pro / Team</Text> 플랜에서 사용할 수 있어요.
       </Text>
-      <View style={{ gap: 10, width: '100%' }}>
-        {[
-          { plan: 'Starter', price: '$29', features: ['기본 분석', '10영상/월'] },
-          { plan: 'Pro', price: '$59', features: ['무제한 분석', '영상 레슨', 'Draw 공유'], highlight: true },
-          { plan: 'Team', price: '$149', features: ['팀 전체', '다중 영상', '전술 추천'], highlight: true },
-        ].map((p, i) => (
-          <Pressable key={i} style={[{
-            borderRadius: 14, padding: 16, borderWidth: p.highlight ? 2 : 1,
-            borderColor: p.highlight ? Colors.accent : Colors.border,
-            backgroundColor: p.highlight ? Colors.accent + '15' : Colors.card,
-            flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-          }]}>
-            <View>
-              <Text style={{ fontSize: 16, fontWeight: '700', color: p.highlight ? Colors.accent : Colors.text }}>{p.plan}</Text>
-              <Text style={{ fontSize: 11, color: Colors.subtext }}>{p.features.join(' · ')}</Text>
-            </View>
-            <Text style={{ fontSize: 18, fontWeight: '800', color: p.highlight ? Colors.accent : Colors.text }}>{p.price}<Text style={{ fontSize: 11 }}>/월</Text></Text>
-          </Pressable>
-        ))}
-      </View>
       <Pressable style={{ marginTop: 20, height: 52, borderRadius: 12, backgroundColor: Colors.accent, width: '100%', justifyContent: 'center', alignItems: 'center' }}>
         <Text style={{ color: Colors.bg, fontSize: 16, fontWeight: '700' }}>업그레이드하기</Text>
       </Pressable>
@@ -272,218 +342,243 @@ export default function VideoLessonsScreen() {
     </View>
   );
 
-  if (step === 'input') return (
-    <ScrollView style={s.root} contentContainerStyle={s.container}>
-      <Text style={s.title}>🎬 영상 레슨</Text>
+  return (
+    <View style={s.root}>
+      <LimitModal />
 
-      {/* 메인 탭 */}
-      <View style={s.mainTabRow}>
-        <Pressable style={[s.mainTab, mainTab==='library' && s.mainTabActive]} onPress={() => setMainTab('library')}>
-          <Text style={[s.mainTabText, mainTab==='library' && s.mainTabTextActive]}>📚 레슨 라이브러리</Text>
+      {/* ── Top 2 sub-tabs ─────────────────────────── */}
+      <View style={s.tabRow}>
+        <Pressable
+          style={[s.tab, mainTab === 'video' && s.tabActive]}
+          onPress={() => setMainTab('video')}
+        >
+          <Text style={[s.tabText, mainTab === 'video' && s.tabTextActive]}>📹 Video Lessons</Text>
         </Pressable>
-        <Pressable style={[s.mainTab, mainTab==='analyze' && s.mainTabActive]} onPress={() => setMainTab('analyze')}>
-          <Text style={[s.mainTabText, mainTab==='analyze' && s.mainTabTextActive]}>🔍 내 영상 분석</Text>
+        <Pressable
+          style={[s.tab, mainTab === 'tactics' && s.tabActive]}
+          onPress={() => setMainTab('tactics')}
+        >
+          <Text style={[s.tabText, mainTab === 'tactics' && s.tabTextActive]}>🏒 Tactics</Text>
         </Pressable>
       </View>
 
-      {/* 라이브러리 탭 */}
-      {mainTab === 'library' && (
-        <View>
-          <Text style={s.libDesc}>레슨을 눌러서 영상을 보고, <Text style={{color:Colors.accent}}>Draw 버튼</Text>으로 멈춘 화면에 그림을 그려 공유할 수 있어요.</Text>
-          {LESSONS.map(item => (
-            <Pressable key={item.id} style={s.lessonCard} onPress={() => router.push(`/lesson/${item.id}` as any)}>
-              <View style={s.thumbWrap}>
-                <Image source={{ uri: `https://img.youtube.com/vi/${item.youtube}/hqdefault.jpg` }} style={s.thumb} resizeMode="cover" />
-                <View style={s.durBadge}><Text style={s.durText}>{item.dur}</Text></View>
-                <View style={s.drawHint}><Text style={s.drawHintText}>✏️ Draw</Text></View>
-              </View>
-              <View style={s.lessonInfo}>
-                <Text style={s.lessonTitle}>{item.title}</Text>
-                <View style={s.tagRow}>
-                  <View style={s.catBadge}><Text style={s.catText}>{item.cat}</Text></View>
-                  <View style={[s.diffBadge, { backgroundColor: DIFF_COLOR[item.diff] + '33' }]}>
-                    <Text style={[s.diffText, { color: DIFF_COLOR[item.diff] }]}>{item.diff}</Text>
+      {/* ── Tactics tab ────────────────────────────── */}
+      {mainTab === 'tactics' && (
+        <TacticsTab plan={plan as PlanTier} />
+      )}
+
+      {/* ── Video tab ──────────────────────────────── */}
+      {mainTab === 'video' && (
+        <>
+          {/* Video sub-tabs: Library / Analyze */}
+          {step === 'input' && (
+            <View style={s.subTabRow}>
+              <Pressable
+                style={[s.subTab, videoSubTab === 'library' && s.subTabActive]}
+                onPress={() => setVideoSubTab('library')}
+              >
+                <Text style={[s.subTabText, videoSubTab === 'library' && s.subTabTextActive]}>
+                  📚 레슨 라이브러리
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[s.subTab, videoSubTab === 'analyze' && s.subTabActive]}
+                onPress={() => setVideoSubTab('analyze')}
+              >
+                <Text style={[s.subTabText, videoSubTab === 'analyze' && s.subTabTextActive]}>
+                  🔍 내 영상 분석
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
+          {step === 'input' && videoSubTab === 'library' && (
+            <ScrollView contentContainerStyle={s.container}>
+              <Text style={s.libDesc}>레슨을 눌러 영상을 보고, <Text style={{color:Colors.accent}}>Draw</Text>로 그림을 그려 공유하세요.</Text>
+              {LESSONS.map(item => (
+                <Pressable key={item.id} style={s.lessonCard} onPress={() => router.push(`/lesson/${item.id}` as any)}>
+                  <View style={s.thumbWrap}>
+                    <Image source={{ uri: `https://img.youtube.com/vi/${item.youtube}/hqdefault.jpg` }} style={s.thumb} resizeMode="cover" />
+                    <View style={s.durBadge}><Text style={s.durText}>{item.dur}</Text></View>
+                    <View style={s.drawHint}><Text style={s.drawHintText}>✏️ Draw</Text></View>
                   </View>
+                  <View style={s.lessonInfo}>
+                    <Text style={s.lessonTitle}>{item.title}</Text>
+                    <View style={s.tagRow}>
+                      <View style={s.catBadge}><Text style={s.catText}>{item.cat}</Text></View>
+                      <View style={[s.diffBadge2, { backgroundColor: DIFF_COLOR[item.diff] + '33' }]}>
+                        <Text style={[s.diffText, { color: DIFF_COLOR[item.diff] }]}>{item.diff}</Text>
+                      </View>
+                    </View>
+                  </View>
+                </Pressable>
+              ))}
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          )}
+
+          {step === 'input' && videoSubTab === 'analyze' && (
+            <ScrollView contentContainerStyle={s.container}>
+              <Text style={s.subtitle}>영상 분석 후 선수별 하이라이트와 아이스타임 다이어그램을 제공해요.</Text>
+              <View style={s.card}>
+                <Text style={s.cardTitle}>📎 YouTube URL</Text>
+                <TextInput
+                  style={s.input} value={url} onChangeText={setUrl}
+                  placeholder="https://youtube.com/watch?v=..."
+                  placeholderTextColor={Colors.subtext}
+                  autoCapitalize="none" autoCorrect={false}
+                />
+                <Text style={s.orText}>— 또는 —</Text>
+                <Pressable style={s.fileBtn} onPress={pickVideo}>
+                  <Text style={s.fileBtnText}>📁 갤러리에서 선택</Text>
+                </Pressable>
+              </View>
+              <Pressable style={s.analyzeBtn} onPress={startWithLimitCheck}>
+                <Text style={s.analyzeBtnText}>🔍 분석 시작</Text>
+              </Pressable>
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          )}
+
+          {step === 'analyzing' && (
+            <View style={[s.center, { flex: 1 }]}>
+              <View style={s.analyzeCard}>
+                <Text style={s.analyzeIcon}>🏒</Text>
+                <Text style={s.analyzeTitle}>AI 분석 중</Text>
+                <Text style={s.analyzeMsg}>{progressMsg}</Text>
+                <View style={s.barBg}>
+                  <Animated.View style={[s.barFill, { width: barWidth }]} />
+                </View>
+                <Text style={s.pctText}>{Math.round(progress)}%</Text>
+                <View style={s.stepList}>
+                  {[
+                    { label: '프레임 추출', done: progress >= 20 },
+                    { label: 'ByteTrack 추적', done: progress >= 45 },
+                    { label: 'OCR 인식', done: progress >= 70 },
+                    { label: '팀 자동 구분', done: progress >= 85 },
+                    { label: '하이라이트 생성', done: progress >= 100 },
+                  ].map((st, i) => (
+                    <View key={i} style={s.stepRow}>
+                      <Text>{st.done ? '✅' : '⏳'}</Text>
+                      <Text style={[s.stepLabel, st.done && s.stepLabelDone]}>{st.label}</Text>
+                    </View>
+                  ))}
                 </View>
               </View>
-            </Pressable>
-          ))}
-        </View>
-      )}
-
-      {/* 내 영상 분석 탭 */}
-      {mainTab === 'analyze' && (
-        <View>
-          <Text style={s.subtitle}>영상을 분석하면 선수별 하이라이트와 아이스타임 다이어그램을 자동으로 생성해요.</Text>
-
-      <View style={s.card}>
-        <Text style={s.cardTitle}>📎 YouTube URL</Text>
-        <TextInput
-          style={s.input}
-          value={url}
-          onChangeText={setUrl}
-          placeholder="https://youtube.com/watch?v=..."
-          placeholderTextColor={Colors.subtext}
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <Text style={s.orText}>— 또는 —</Text>
-        <Pressable style={s.fileBtn} onPress={pickVideo}>
-          <Text style={s.fileBtnText}>📁 갤러리에서 선택</Text>
-        </Pressable>
-      </View>
-
-      <View style={s.howCard}>
-        <Text style={s.howTitle}>분석 후 제공되는 것</Text>
-        {[
-          { icon: '👥', text: '선수별 자동 감지 (등번호 OCR)' },
-          { icon: '⏱️', text: '아이스타임 & 시프트 측정' },
-          { icon: '🎬', text: '하이라이트 클립 자동 생성' },
-          { icon: '🗺️', text: '빙판 이동 경로 다이어그램' },
-          { icon: '📊', text: '팀/선수별 통계 리포트' },
-        ].map((item, i) => (
-          <View key={i} style={s.howRow}>
-            <Text style={s.howIcon}>{item.icon}</Text>
-            <Text style={s.howText}>{item.text}</Text>
-          </View>
-        ))}
-      </View>
-
-      <Pressable style={s.analyzeBtn} onPress={startWithLimitCheck}>
-        <Text style={s.analyzeBtnText}>🔍 분석 시작</Text>
-      </Pressable>
-        </View>
-      )}
-    </ScrollView>
-  );
-
-  // ── STEP 2: 분석 중 ───────────────────────────────────────
-  if (step === 'analyzing') return (
-    <View style={[s.root, s.center]}>
-      <View style={s.analyzeCard}>
-        <Text style={s.analyzeIcon}>🏒</Text>
-        <Text style={s.analyzeTitle}>AI 분석 중</Text>
-        <Text style={s.analyzeMsg}>{progressMsg}</Text>
-        {/* 프로그레스 바 */}
-        <View style={s.barBg}>
-          <Animated.View style={[s.barFill, { width: barWidth }]} />
-        </View>
-        <Text style={s.pctText}>{Math.round(progress)}%</Text>
-
-        <View style={s.stepList}>
-          {[
-            { label: '프레임 추출', done: progress >= 20 },
-            { label: 'ByteTrack 추적', done: progress >= 45 },
-            { label: 'OCR 인식', done: progress >= 70 },
-            { label: '팀 자동 구분', done: progress >= 85 },
-            { label: '하이라이트 생성', done: progress >= 100 },
-          ].map((st, i) => (
-            <View key={i} style={s.stepRow}>
-              <Text style={st.done ? s.stepDone : s.stepPending}>
-                {st.done ? '✅' : '⏳'}
-              </Text>
-              <Text style={[s.stepLabel, st.done && s.stepLabelDone]}>{st.label}</Text>
             </View>
-          ))}
-        </View>
-      </View>
+          )}
+
+          {step === 'result' && (
+            <ScrollView contentContainerStyle={s.container}>
+              <View style={s.resultHeader}>
+                <Text style={s.title}>✅ 분석 완료</Text>
+                <Pressable onPress={reset} style={s.resetBtn}>
+                  <Text style={s.resetText}>새 영상</Text>
+                </Pressable>
+              </View>
+              <Text style={s.sectionTitle}>감지된 선수 ({result?.players.length ?? 0}명)</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.playerScroll}>
+                {result?.players.map((p, i) => (
+                  <Pressable key={i}
+                    style={[s.playerChip, selectedJersey === p.jersey && s.playerChipActive]}
+                    onPress={() => loadPlayerShifts(p.jersey)}>
+                    <Text style={s.playerNum}>#{p.jersey}</Text>
+                    <Text style={s.playerTeam}>{p.team}</Text>
+                    <Text style={s.playerIce}>{p.total_ice_time_min.toFixed(1)}분</Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+              {selectedJersey && (
+                <View style={{ marginTop: 16 }}>
+                  <Text style={s.sectionTitle}>#{selectedJersey} 아이스타임 다이어그램</Text>
+                  {loadingShifts ? (
+                    <View style={[s.card, s.center, { height: 80 }]}>
+                      <ActivityIndicator color={Colors.accent} />
+                    </View>
+                  ) : playerShifts.length > 0 ? (
+                    <IceTimeDiagram
+                      shifts={playerShifts}
+                      playerJersey={selectedJersey}
+                      playerTeam={result?.players.find(p => p.jersey === selectedJersey)?.team as any ?? 'HOME'}
+                      autoPlay={true}
+                    />
+                  ) : null}
+                </View>
+              )}
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 16 }}>
+                {[
+                  { icon: '🎬', label: '하이라이트 재생',  color: Colors.accent },
+                  { icon: '🏒', label: '풀타임 재생',      color: '#FF6644' },
+                  { icon: '📊', label: '팀 리포트 보기',   color: '#FFD700' },
+                  { icon: '💾', label: '영상 저장',        color: Colors.subtext },
+                ].map((btn, i) => (
+                  <Pressable key={i}
+                    style={{ width: '47%', backgroundColor: Colors.card, borderRadius: 12, padding: 16, borderWidth: 1, borderColor: btn.color + '66', alignItems: 'center', gap: 6 }}
+                    onPress={() => Alert.alert(btn.label, 'RunPod 서버 연결 후 사용 가능')}>
+                    <Text style={{ fontSize: 26 }}>{btn.icon}</Text>
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: btn.color, textAlign: 'center' }}>{btn.label}</Text>
+                  </Pressable>
+                ))}
+              </View>
+              <View style={{ height: 40 }} />
+            </ScrollView>
+          )}
+        </>
+      )}
     </View>
-  );
-
-  // ── STEP 3: 결과 ──────────────────────────────────────────
-  return (
-    <ScrollView style={s.root} contentContainerStyle={s.container}>
-      <View style={s.resultHeader}>
-        <Text style={s.title}>✅ 분석 완료</Text>
-        <Pressable onPress={reset} style={s.resetBtn}>
-          <Text style={s.resetText}>새 영상</Text>
-        </Pressable>
-      </View>
-
-      {/* 선수 목록 */}
-      <Text style={s.sectionTitle}>감지된 선수 ({result?.players.length ?? 0}명)</Text>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.playerScroll}>
-        {result?.players.map((p, i) => (
-          <Pressable
-            key={i}
-            style={[s.playerChip, selectedJersey === p.jersey && s.playerChipActive]}
-            onPress={() => loadPlayerShifts(p.jersey)}
-          >
-            <Text style={s.playerNum}>#{p.jersey}</Text>
-            <Text style={s.playerTeam}>{p.team}</Text>
-            <Text style={s.playerIce}>{p.total_ice_time_min.toFixed(1)}분</Text>
-          </Pressable>
-        ))}
-      </ScrollView>
-
-      {/* 선택된 선수 다이어그램 */}
-      {selectedJersey && (
-        <View style={{ marginTop: 16 }}>
-          <Text style={s.sectionTitle}>#{selectedJersey} 아이스타임 다이어그램</Text>
-          {loadingShifts ? (
-            <View style={[s.card, s.center, { height: 80 }]}>
-              <ActivityIndicator color={Colors.accent} />
-            </View>
-          ) : playerShifts.length > 0 ? (
-            <IceTimeDiagram
-              shifts={playerShifts}
-              playerJersey={selectedJersey}
-              playerTeam={result?.players.find(p => p.jersey === selectedJersey)?.team as any ?? 'HOME'}
-              autoPlay={true}
-            />
-          ) : null}
-        </View>
-      )}
-
-      {/* 액션 버튼 */}
-      <Text style={s.sectionTitle}>하이라이트</Text>
-      <View style={s.actionGrid}>
-        {[
-          { icon: '🎬', label: '하이라이트 재생',  color: Colors.accent },
-          { icon: '🏒', label: '풀타임 재생',      color: '#FF6644' },
-          { icon: '📊', label: '팀 리포트 보기',   color: '#FFD700' },
-          { icon: '💾', label: '영상 저장',        color: Colors.subtext },
-        ].map((btn, i) => (
-          <Pressable
-            key={i}
-            style={[s.actionBtn, { borderColor: btn.color + '66' }]}
-            onPress={() => Alert.alert(btn.label, 'RunPod 서버 연결 후 사용 가능')}
-          >
-            <Text style={s.actionIcon}>{btn.icon}</Text>
-            <Text style={[s.actionLabel, { color: btn.color }]}>{btn.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      <View style={{ height: 40 }} />
-    </ScrollView>
   );
 }
 
+// ─── Tactics tab styles ───────────────────────────────────────────────────────
+const ts = StyleSheet.create({
+  backRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  backBtn: { color: Colors.accent, fontSize: 15, fontWeight: '600' },
+  weekTitle: { fontSize: 16, fontWeight: '800', color: Colors.text },
+  weekDesc: { fontSize: 13, color: Colors.subtext, lineHeight: 20 },
+  progressCard: { backgroundColor: Colors.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: Colors.border, gap: 8 },
+  progressHeader: { flexDirection: 'row', justifyContent: 'space-between' },
+  progressLabel: { fontSize: 13, fontWeight: '700', color: Colors.text },
+  progressPct: { fontSize: 13, fontWeight: '800', color: Colors.accent },
+  barBg: { height: 8, backgroundColor: Colors.input, borderRadius: 4, overflow: 'hidden' },
+  barFill: { height: '100%', backgroundColor: Colors.accent, borderRadius: 4 },
+  progressSub: { fontSize: 11, color: Colors.subtext },
+  levelCard: { backgroundColor: Colors.card, borderRadius: 14, borderWidth: 1, borderColor: Colors.border, overflow: 'hidden' },
+  levelHeader: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 10 },
+  levelEmoji: { fontSize: 20 },
+  levelTitle: { fontSize: 15, fontWeight: '800', color: Colors.text },
+  levelMeta: { fontSize: 11, color: Colors.subtext, marginTop: 2 },
+  chevron: { fontSize: 12, color: Colors.subtext },
+  weekList: { borderTopWidth: 1, borderTopColor: Colors.border },
+  weekRow: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10, borderBottomWidth: 1, borderBottomColor: Colors.border + '55' },
+  weekRowLocked: { opacity: 0.55 },
+  weekIconWrap: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.input, justifyContent: 'center', alignItems: 'center' },
+  lockIcon: { fontSize: 13 },
+  checkIcon: { fontSize: 14 },
+  weekNumText: { fontSize: 11, fontWeight: '800', color: Colors.accent },
+  weekTitle2: { fontSize: 13, fontWeight: '700', color: Colors.text },
+  weekCategory: { fontSize: 10, color: Colors.subtext, marginTop: 2, letterSpacing: 0.5 },
+});
+
+// ─── Main styles ──────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.bg },
-  container: { padding: 20, paddingTop: 60 },
-  center: { justifyContent: 'center', alignItems: 'center', flex: 1 },
-  title: { fontSize: 26, fontWeight: '800', color: Colors.text, marginBottom: 6 },
-  subtitle: { fontSize: 14, color: Colors.subtext, lineHeight: 20, marginBottom: 24 },
-  card: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: Colors.border, marginBottom: 16, gap: 12 },
-  cardTitle: { fontSize: 14, fontWeight: '700', color: Colors.text },
-  input: { height: 48, backgroundColor: Colors.input, borderRadius: 10, paddingHorizontal: 14, color: Colors.text, fontSize: 14, borderWidth: 1, borderColor: Colors.border },
-  orText: { textAlign: 'center', color: Colors.subtext, fontSize: 12 },
-  fileBtn: { height: 44, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' },
-  fileBtnText: { color: Colors.subtext, fontSize: 14 },
-  howCard: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: Colors.border, marginBottom: 20, gap: 10 },
-  howTitle: { fontSize: 14, fontWeight: '700', color: Colors.text, marginBottom: 4 },
-  howRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  howIcon: { fontSize: 18, width: 26 },
-  howText: { fontSize: 13, color: Colors.subtext },
-  analyzeBtn: { height: 52, borderRadius: 12, backgroundColor: Colors.accent, justifyContent: 'center', alignItems: 'center' },
-  analyzeBtnText: { fontSize: 17, fontWeight: '700', color: Colors.bg },
-  mainTabRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  mainTab: { flex: 1, height: 40, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card, justifyContent: 'center', alignItems: 'center' },
-  mainTabActive: { borderColor: Colors.accent, backgroundColor: Colors.accent + '18' },
-  mainTabText: { fontSize: 13, fontWeight: '700', color: Colors.subtext },
-  mainTabTextActive: { color: Colors.accent },
+  container: { padding: 20, paddingTop: 12 },
+  center: { justifyContent: 'center', alignItems: 'center' },
+  // Top sub-tabs
+  tabRow: { flexDirection: 'row', paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, gap: 8 },
+  tab: { flex: 1, height: 42, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card, justifyContent: 'center', alignItems: 'center' },
+  tabActive: { borderColor: Colors.accent, backgroundColor: Colors.accent + '18' },
+  tabText: { fontSize: 13, fontWeight: '700', color: Colors.subtext },
+  tabTextActive: { color: Colors.accent },
+  // Video sub-tabs
+  subTabRow: { flexDirection: 'row', paddingHorizontal: 16, paddingBottom: 8, gap: 8 },
+  subTab: { flex: 1, height: 36, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card, justifyContent: 'center', alignItems: 'center' },
+  subTabActive: { borderColor: Colors.accent + '88', backgroundColor: Colors.accent + '12' },
+  subTabText: { fontSize: 12, fontWeight: '700', color: Colors.subtext },
+  subTabTextActive: { color: Colors.accent },
+  // Library
+  title: { fontSize: 22, fontWeight: '800', color: Colors.text },
+  subtitle: { fontSize: 13, color: Colors.subtext, lineHeight: 20, marginBottom: 16 },
   libDesc: { fontSize: 13, color: Colors.subtext, lineHeight: 20, marginBottom: 16 },
   lessonCard: { backgroundColor: Colors.card, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border, marginBottom: 12 },
   thumbWrap: { position: 'relative', width: '100%', aspectRatio: 16/9 },
@@ -497,9 +592,18 @@ const s = StyleSheet.create({
   tagRow: { flexDirection: 'row', gap: 6 },
   catBadge: { backgroundColor: Colors.input, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   catText: { fontSize: 11, color: Colors.subtext, fontWeight: '600' },
-  diffBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  diffBadge2: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
   diffText: { fontSize: 11, fontWeight: '700' },
-  // 분석 중
+  // Analyze
+  card: { backgroundColor: Colors.card, borderRadius: 16, padding: 16, borderWidth: 1, borderColor: Colors.border, marginBottom: 16, gap: 12 },
+  cardTitle: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  input: { height: 48, backgroundColor: Colors.input, borderRadius: 10, paddingHorizontal: 14, color: Colors.text, fontSize: 14, borderWidth: 1, borderColor: Colors.border },
+  orText: { textAlign: 'center', color: Colors.subtext, fontSize: 12 },
+  fileBtn: { height: 44, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' },
+  fileBtnText: { color: Colors.subtext, fontSize: 14 },
+  analyzeBtn: { height: 52, borderRadius: 12, backgroundColor: Colors.accent, justifyContent: 'center', alignItems: 'center' },
+  analyzeBtnText: { fontSize: 17, fontWeight: '700', color: Colors.bg },
+  // Analyzing
   analyzeCard: { backgroundColor: Colors.card, borderRadius: 20, padding: 28, borderWidth: 1, borderColor: Colors.border, alignItems: 'center', gap: 12, width: '90%' },
   analyzeIcon: { fontSize: 48 },
   analyzeTitle: { fontSize: 20, fontWeight: '800', color: Colors.text },
@@ -509,12 +613,10 @@ const s = StyleSheet.create({
   pctText: { fontSize: 13, fontWeight: '700', color: Colors.accent },
   stepList: { width: '100%', gap: 8, marginTop: 8 },
   stepRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  stepDone: { fontSize: 14 },
-  stepPending: { fontSize: 14, opacity: 0.3 },
   stepLabel: { fontSize: 13, color: Colors.subtext },
   stepLabelDone: { color: Colors.text },
-  // 결과
-  resultHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
+  // Result
+  resultHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   resetBtn: { backgroundColor: Colors.card, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8, borderWidth: 1, borderColor: Colors.border },
   resetText: { color: Colors.subtext, fontSize: 13 },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: Colors.text, marginBottom: 10 },
@@ -524,8 +626,4 @@ const s = StyleSheet.create({
   playerNum: { fontSize: 20, fontWeight: '900', color: Colors.accent },
   playerTeam: { fontSize: 10, color: Colors.subtext },
   playerIce: { fontSize: 11, color: Colors.text, fontWeight: '600' },
-  actionGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 4 },
-  actionBtn: { width: '47%', backgroundColor: Colors.card, borderRadius: 12, padding: 16, borderWidth: 1, alignItems: 'center', gap: 6 },
-  actionIcon: { fontSize: 26 },
-  actionLabel: { fontSize: 12, fontWeight: '700', textAlign: 'center' },
 });

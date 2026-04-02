@@ -2,32 +2,36 @@ import { useState, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
   Dimensions, PanResponder, Modal, Share, Alert, Linking,
-  FlatList,
+  FlatList, TextInput,
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { Colors } from '../../constants/Colors';
 import { MOCK_LESSONS } from '../../data/mockData';
-import Svg, { Path, Line, Circle, G, Polygon } from 'react-native-svg';
+import Svg, { Path, Line, Circle, G, Polygon, Text as SvgText } from 'react-native-svg';
 import { AVPlaybackStatus } from 'expo-av';
 import { Video, ResizeMode } from 'expo-av';
 import YoutubePlayer from 'react-native-youtube-iframe';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import * as MediaLibrary from 'expo-media-library';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const VIDEO_H = Math.round(SCREEN_W * 9 / 16);
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Drawing types
-// ─────────────────────────────────────────────
-type DrawTool = 'pen' | 'arrow' | 'circle' | 'line';
+// ─────────────────────────────────────────────────────────────────────────────
+type DrawTool = 'pen' | 'arrow' | 'circle' | 'line' | 'text';
 interface Point { x: number; y: number }
 
-interface PenElement   { id: string; tool: 'pen';    points: Point[]; color: string; sw: number }
-interface LineElement  { id: string; tool: 'line';   x1: number; y1: number; x2: number; y2: number; color: string; sw: number }
-interface ArrowElement { id: string; tool: 'arrow';  x1: number; y1: number; x2: number; y2: number; color: string; sw: number }
-interface CircleElement{ id: string; tool: 'circle'; cx: number; cy: number; r: number;  color: string; sw: number }
+interface PenElement    { id: string; tool: 'pen';    points: Point[]; color: string; sw: number }
+interface LineElement   { id: string; tool: 'line';   x1: number; y1: number; x2: number; y2: number; color: string; sw: number }
+interface ArrowElement  { id: string; tool: 'arrow';  x1: number; y1: number; x2: number; y2: number; color: string; sw: number }
+interface CircleElement { id: string; tool: 'circle'; cx: number; cy: number; r: number;  color: string; sw: number }
+interface TextElement   { id: string; tool: 'text';   x: number;  y: number;  text: string; color: string; sw: number }
 
-type DrawElement = PenElement | LineElement | ArrowElement | CircleElement;
+type DrawElement = PenElement | LineElement | ArrowElement | CircleElement | TextElement;
 
 const COLORS = ['#FF3B30', '#FFD700', '#007AFF', '#FFFFFF', '#34C759'];
 const STROKE_WIDTHS = [2, 4, 6];
@@ -44,12 +48,7 @@ function arrowHead(x1: number, y1: number, x2: number, y2: number, color: string
     x2 + size * Math.cos(a1), y2 + size * Math.sin(a1),
     x2 + size * Math.cos(a2), y2 + size * Math.sin(a2),
   ];
-  return (
-    <Polygon
-      points={pts.join(',')}
-      fill={color}
-    />
-  );
+  return <Polygon points={pts.join(',')} fill={color} />;
 }
 
 function renderElement(el: DrawElement): React.ReactElement {
@@ -69,15 +68,28 @@ function renderElement(el: DrawElement): React.ReactElement {
       </G>
     );
   }
+  if (el.tool === 'text') {
+    return (
+      <SvgText
+        key={el.id}
+        x={el.x} y={el.y}
+        fill={el.color}
+        fontSize={el.sw * 4 + 10}
+        fontWeight="700"
+      >
+        {el.text}
+      </SvgText>
+    );
+  }
   // circle
   return <Circle key={el.id} cx={el.cx} cy={el.cy} r={el.r} stroke={el.color} strokeWidth={el.sw} fill="none" />;
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Drawing Overlay
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 interface DrawingOverlayProps {
-  onDone: () => void;
+  onDone: (captureViewRef: React.RefObject<View | null>) => void;
   onClose: () => void;
 }
 
@@ -86,7 +98,16 @@ function DrawingOverlay({ onDone, onClose }: DrawingOverlayProps) {
   const [color, setColor] = useState(COLORS[0]);
   const [sw, setSw] = useState(4);
   const [elements, setElements] = useState<DrawElement[]>([]);
+  const [redoStack, setRedoStack] = useState<DrawElement[]>([]);
   const [current, setCurrent] = useState<DrawElement | null>(null);
+
+  // Text tool state
+  const [textPos, setTextPos] = useState<{ x: number; y: number } | null>(null);
+  const [showTextInput, setShowTextInput] = useState(false);
+  const [pendingText, setPendingText] = useState('');
+
+  // View ref for capture
+  const captureViewRef = useRef<View>(null);
 
   const panResponder = useRef(
     PanResponder.create({
@@ -95,16 +116,22 @@ function DrawingOverlay({ onDone, onClose }: DrawingOverlayProps) {
       onPanResponderGrant: (evt) => {
         const { locationX: x, locationY: y } = evt.nativeEvent;
         const id = uid();
-        // Access current tool/color/sw via closure — stored in refs below
-        setCurrent(prev => {
-          const t = toolRef.current;
-          const c = colorRef.current;
-          const s = swRef.current;
+        const t = toolRef.current;
+        const c = colorRef.current;
+        const s = swRef.current;
+
+        if (t === 'text') {
+          setTextPos({ x, y });
+          setPendingText('');
+          setShowTextInput(true);
+          return;
+        }
+        setCurrent(() => {
           if (t === 'pen')    return { id, tool: 'pen', points: [{ x, y }], color: c, sw: s };
           if (t === 'line')   return { id, tool: 'line',   x1: x, y1: y, x2: x, y2: y, color: c, sw: s };
           if (t === 'arrow')  return { id, tool: 'arrow',  x1: x, y1: y, x2: x, y2: y, color: c, sw: s };
           if (t === 'circle') return { id, tool: 'circle', cx: x, cy: y, r: 0,   color: c, sw: s };
-          return prev;
+          return null;
         });
       },
       onPanResponderMove: (evt) => {
@@ -114,57 +141,134 @@ function DrawingOverlay({ onDone, onClose }: DrawingOverlayProps) {
           if (prev.tool === 'pen')    return { ...prev, points: [...prev.points, { x, y }] };
           if (prev.tool === 'line')   return { ...prev, x2: x, y2: y };
           if (prev.tool === 'arrow')  return { ...prev, x2: x, y2: y };
-          if (prev.tool === 'circle') {
-            const r = Math.hypot(x - prev.cx, y - prev.cy);
-            return { ...prev, r };
-          }
+          if (prev.tool === 'circle') return { ...prev, r: Math.hypot(x - prev.cx, y - prev.cy) };
           return prev;
         });
       },
       onPanResponderRelease: () => {
         setCurrent(prev => {
-          if (prev) setElements(els => [...els, prev]);
+          if (prev) {
+            setElements(els => [...els, prev]);
+            setRedoStack([]);
+          }
           return null;
         });
       },
     })
   ).current;
 
-  // Refs for closure access in PanResponder
   const toolRef  = useRef<DrawTool>('pen');
   const colorRef = useRef(COLORS[0]);
   const swRef    = useRef(4);
 
-  const setToolSync = (t: DrawTool) => { toolRef.current = t; setTool(t); };
-  const setColorSync = (c: string) => { colorRef.current = c; setColor(c); };
-  const setSwSync = (s: number) => { swRef.current = s; setSw(s); };
+  const setToolSync  = (t: DrawTool) => { toolRef.current = t; setTool(t); };
+  const setColorSync = (c: string)   => { colorRef.current = c; setColor(c); };
+  const setSwSync    = (s: number)   => { swRef.current = s; setSw(s); };
 
-  const undo = () => setElements(els => els.slice(0, -1));
-  const clear = () => setElements([]);
+  const undo = () => {
+    setElements(els => {
+      if (els.length === 0) return els;
+      const last = els[els.length - 1];
+      setRedoStack(r => [...r, last]);
+      return els.slice(0, -1);
+    });
+  };
+
+  const redo = () => {
+    setRedoStack(r => {
+      if (r.length === 0) return r;
+      const top = r[r.length - 1];
+      setElements(els => [...els, top]);
+      return r.slice(0, -1);
+    });
+  };
+
+  const clear = () => { setElements([]); setRedoStack([]); };
+
+  const confirmText = () => {
+    if (pendingText.trim() && textPos) {
+      const el: TextElement = {
+        id: uid(),
+        tool: 'text',
+        x: textPos.x,
+        y: textPos.y,
+        text: pendingText.trim(),
+        color: colorRef.current,
+        sw: swRef.current,
+      };
+      setElements(els => [...els, el]);
+      setRedoStack([]);
+    }
+    setShowTextInput(false);
+    setTextPos(null);
+    setPendingText('');
+  };
+
+  const toolIcons: Record<DrawTool, string> = {
+    pen: '✏️', arrow: '➡️', circle: '⭕', line: '—', text: '𝐓',
+  };
 
   return (
     <View style={draw.overlay}>
-      {/* SVG Canvas */}
-      <View style={draw.canvas} {...panResponder.panHandlers}>
-        <Svg width={SCREEN_W} height={VIDEO_H}>
-          {elements.map(renderElement)}
-          {current && renderElement(current)}
-        </Svg>
+      {/* Capture area: canvas + watermark */}
+      <View ref={captureViewRef} style={draw.captureArea} collapsable={false}>
+        <View style={draw.canvas} {...panResponder.panHandlers}>
+          <Svg width={SCREEN_W} height={VIDEO_H}>
+            {elements.map(renderElement)}
+            {current && renderElement(current)}
+            {/* Watermark */}
+            <SvgText
+              x={SCREEN_W - 8}
+              y={VIDEO_H - 8}
+              fill="rgba(255,255,255,0.35)"
+              fontSize={9}
+              fontWeight="600"
+              textAnchor="end"
+            >
+              IceIQ • iceiq.app
+            </SvgText>
+          </Svg>
+        </View>
       </View>
+
+      {/* Text input modal */}
+      {showTextInput && (
+        <View style={draw.textModal}>
+          <View style={draw.textModalInner}>
+            <Text style={draw.textModalLabel}>텍스트 입력</Text>
+            <TextInput
+              style={draw.textInput}
+              value={pendingText}
+              onChangeText={setPendingText}
+              placeholder="텍스트를 입력하세요"
+              placeholderTextColor={Colors.subtext}
+              autoFocus
+              returnKeyType="done"
+              onSubmitEditing={confirmText}
+            />
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
+              <Pressable style={[draw.actionBtn, { flex: 1 }]} onPress={() => { setShowTextInput(false); setPendingText(''); }}>
+                <Text style={draw.actionText}>취소</Text>
+              </Pressable>
+              <Pressable style={[draw.actionBtn, draw.doneBtn, { flex: 1 }]} onPress={confirmText}>
+                <Text style={[draw.actionText, { color: Colors.bg, fontWeight: '700' }]}>확인</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Toolbar */}
       <View style={draw.toolbar}>
         {/* Tools */}
         <View style={draw.row}>
-          {(['pen', 'arrow', 'circle', 'line'] as DrawTool[]).map(t => (
+          {(['pen', 'arrow', 'circle', 'line', 'text'] as DrawTool[]).map(t => (
             <Pressable
               key={t}
               style={[draw.toolBtn, tool === t && draw.toolBtnActive]}
               onPress={() => setToolSync(t)}
             >
-              <Text style={draw.toolIcon}>
-                {t === 'pen' ? '✏️' : t === 'arrow' ? '➡️' : t === 'circle' ? '⭕' : '—'}
-              </Text>
+              <Text style={draw.toolIcon}>{toolIcons[t]}</Text>
             </Pressable>
           ))}
         </View>
@@ -194,14 +298,17 @@ function DrawingOverlay({ onDone, onClose }: DrawingOverlayProps) {
         </View>
 
         {/* Actions */}
-        <View style={[draw.row, { gap: 8 }]}>
+        <View style={[draw.row, { gap: 6 }]}>
           <Pressable style={draw.actionBtn} onPress={undo}>
-            <Text style={draw.actionText}>Undo</Text>
+            <Text style={draw.actionText}>↩ Undo</Text>
+          </Pressable>
+          <Pressable style={[draw.actionBtn, redoStack.length === 0 && { opacity: 0.4 }]} onPress={redo}>
+            <Text style={draw.actionText}>↪ Redo</Text>
           </Pressable>
           <Pressable style={draw.actionBtn} onPress={clear}>
             <Text style={draw.actionText}>Clear</Text>
           </Pressable>
-          <Pressable style={[draw.actionBtn, draw.doneBtn]} onPress={onDone}>
+          <Pressable style={[draw.actionBtn, draw.doneBtn]} onPress={() => onDone(captureViewRef)}>
             <Text style={[draw.actionText, { color: Colors.bg, fontWeight: '700' }]}>Done</Text>
           </Pressable>
           <Pressable style={draw.actionBtn} onPress={onClose}>
@@ -213,12 +320,18 @@ function DrawingOverlay({ onDone, onClose }: DrawingOverlayProps) {
   );
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Share Modal
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 const SHARE_MSG = '🏒 IceIQ로 분석한 하키 드로잉이에요!\n앱 다운로드: https://iceiq.app';
 
-function ShareModal({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+interface ShareModalProps {
+  visible: boolean;
+  onClose: () => void;
+  capturedUri?: string | null;
+}
+
+function ShareModal({ visible, onClose, capturedUri }: ShareModalProps) {
   const shareOptions = [
     {
       icon: '📤',
@@ -227,10 +340,11 @@ function ShareModal({ visible, onClose }: { visible: boolean; onClose: () => voi
       color: Colors.accent,
       onPress: async () => {
         try {
-          await Share.share({
-            message: SHARE_MSG,
-            title: 'IceIQ 드로잉 공유',
-          });
+          if (capturedUri && await Sharing.isAvailableAsync()) {
+            await Sharing.shareAsync(capturedUri, { mimeType: 'image/png', dialogTitle: 'IceIQ 드로잉 공유' });
+          } else {
+            await Share.share({ message: SHARE_MSG, title: 'IceIQ 드로잉 공유' });
+          }
         } catch (_) {}
         onClose();
       },
@@ -241,15 +355,10 @@ function ShareModal({ visible, onClose }: { visible: boolean; onClose: () => voi
       desc: '카카오톡으로 전송',
       color: '#FEE500',
       onPress: async () => {
-        // 카카오톡 URL 스킴 (설치된 경우 열림)
         const kakaoUrl = 'kakaolink://send?text=' + encodeURIComponent(SHARE_MSG);
         const canOpen = await Linking.canOpenURL(kakaoUrl);
-        if (canOpen) {
-          await Linking.openURL(kakaoUrl);
-        } else {
-          // 카카오톡 미설치 시 시스템 공유로 대체
-          await Share.share({ message: SHARE_MSG });
-        }
+        if (canOpen) { await Linking.openURL(kakaoUrl); }
+        else { await Share.share({ message: SHARE_MSG }); }
         onClose();
       },
     },
@@ -260,11 +369,8 @@ function ShareModal({ visible, onClose }: { visible: boolean; onClose: () => voi
       color: '#4488FF',
       onPress: async () => {
         const mailUrl = `mailto:?subject=${encodeURIComponent('IceIQ 하키 드로잉')}&body=${encodeURIComponent(SHARE_MSG)}`;
-        try {
-          await Linking.openURL(mailUrl);
-        } catch {
-          await Share.share({ message: SHARE_MSG });
-        }
+        try { await Linking.openURL(mailUrl); }
+        catch { await Share.share({ message: SHARE_MSG }); }
         onClose();
       },
     },
@@ -275,11 +381,8 @@ function ShareModal({ visible, onClose }: { visible: boolean; onClose: () => voi
       color: '#00CC66',
       onPress: async () => {
         const smsUrl = `sms:?body=${encodeURIComponent(SHARE_MSG)}`;
-        try {
-          await Linking.openURL(smsUrl);
-        } catch {
-          await Share.share({ message: SHARE_MSG });
-        }
+        try { await Linking.openURL(smsUrl); }
+        catch { await Share.share({ message: SHARE_MSG }); }
         onClose();
       },
     },
@@ -288,7 +391,11 @@ function ShareModal({ visible, onClose }: { visible: boolean; onClose: () => voi
       label: '갤러리에 저장',
       desc: '이미지로 저장',
       color: '#FF6644',
-      onPress: () => {
+      onPress: async () => {
+        if (!capturedUri) { Alert.alert('오류', '캡처된 이미지가 없어요'); onClose(); return; }
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status !== 'granted') { Alert.alert('권한 필요', '갤러리 권한이 필요해요'); onClose(); return; }
+        await MediaLibrary.saveToLibraryAsync(capturedUri);
         Alert.alert('저장 완료', '드로잉이 갤러리에 저장되었어요! ✅');
         onClose();
       },
@@ -298,10 +405,7 @@ function ShareModal({ visible, onClose }: { visible: boolean; onClose: () => voi
       label: '링크 복사',
       desc: '클립보드에 복사',
       color: Colors.subtext,
-      onPress: () => {
-        Alert.alert('복사 완료', '링크가 복사되었어요! 📋');
-        onClose();
-      },
+      onPress: () => { Alert.alert('복사 완료', '링크가 복사되었어요! 📋'); onClose(); },
     },
   ];
 
@@ -316,14 +420,9 @@ function ShareModal({ visible, onClose }: { visible: boolean; onClose: () => voi
             </Pressable>
           </View>
           <Text style={share.shareDesc}>드로잉이 포함된 캡처 화면을 공유해요</Text>
-
           <View style={share.optionGrid}>
             {shareOptions.map((opt, i) => (
-              <Pressable
-                key={i}
-                style={share.optionCard}
-                onPress={opt.onPress}
-              >
+              <Pressable key={i} style={share.optionCard} onPress={opt.onPress}>
                 <View style={[share.optionIconBg, { backgroundColor: opt.color + '22' }]}>
                   <Text style={share.optionIcon}>{opt.icon}</Text>
                 </View>
@@ -332,7 +431,6 @@ function ShareModal({ visible, onClose }: { visible: boolean; onClose: () => voi
               </Pressable>
             ))}
           </View>
-
           <Pressable style={share.cancelBtn} onPress={onClose}>
             <Text style={share.cancelText}>취소</Text>
           </Pressable>
@@ -342,9 +440,9 @@ function ShareModal({ visible, onClose }: { visible: boolean; onClose: () => voi
   );
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Upgrade Modal
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 function UpgradeModal({ visible, onClose, onUpgrade }: { visible: boolean; onClose: () => void; onUpgrade: () => void }) {
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -367,9 +465,9 @@ function UpgradeModal({ visible, onClose, onUpgrade }: { visible: boolean; onClo
   );
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Main Screen
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 export default function LessonDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -380,19 +478,26 @@ export default function LessonDetailScreen() {
   const [showDraw, setShowDraw] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [capturedUri, setCapturedUri] = useState<string | null>(null);
 
   const videoRef = useRef<any>(null);
   const related = MOCK_LESSONS.filter(l => lesson?.relatedIds.includes(l.id));
 
-  const handleDrawPress = () => {
-    setPlaying(false);
-    setShowDraw(true);
-  };
+  const handleDrawPress = () => { setPlaying(false); setShowDraw(true); };
 
-  const handleDrawDone = () => {
+  const handleDrawDone = useCallback(async (captureViewRef: React.RefObject<View | null>) => {
+    try {
+      const uri = await captureRef(captureViewRef as React.RefObject<View>, {
+        format: 'png',
+        quality: 0.9,
+      });
+      setCapturedUri(uri);
+    } catch {
+      setCapturedUri(null);
+    }
     setShowDraw(false);
     setShowShare(true);
-  };
+  }, []);
 
   if (!lesson) {
     return (
@@ -470,7 +575,6 @@ export default function LessonDetailScreen() {
               />
             )}
 
-            {/* Draw overlay (shown over video area) */}
             {showDraw && (
               <View style={StyleSheet.absoluteFill}>
                 <DrawingOverlay
@@ -508,7 +612,6 @@ export default function LessonDetailScreen() {
             <Text style={s.title}>{lesson.title}</Text>
             <Text style={s.description}>{lesson.description}</Text>
 
-            {/* Key Takeaways */}
             <View style={s.takeawaysCard}>
               <Text style={s.sectionTitle}>Key Takeaways</Text>
               {lesson.keyTakeaways.map((t, i) => (
@@ -519,13 +622,11 @@ export default function LessonDetailScreen() {
               ))}
             </View>
 
-            {/* Related Lessons */}
             {related.length > 0 && (
               <View style={s.relatedSection}>
                 <Text style={s.sectionTitle}>Related Lessons</Text>
                 <FlatList
-                  horizontal
-                  data={related}
+                  horizontal data={related}
                   keyExtractor={item => item.id}
                   showsHorizontalScrollIndicator={false}
                   contentContainerStyle={{ gap: 12 }}
@@ -560,7 +661,7 @@ export default function LessonDetailScreen() {
         </ScrollView>
       </View>
 
-      <ShareModal visible={showShare} onClose={() => setShowShare(false)} />
+      <ShareModal visible={showShare} onClose={() => setShowShare(false)} capturedUri={capturedUri} />
       <UpgradeModal
         visible={showUpgrade}
         onClose={() => setShowUpgrade(false)}
@@ -570,9 +671,9 @@ export default function LessonDetailScreen() {
   );
 }
 
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // Styles
-// ─────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.bg },
   notFound: { flex: 1, backgroundColor: Colors.bg, justifyContent: 'center', alignItems: 'center' },
@@ -609,42 +710,24 @@ const s = StyleSheet.create({
   },
   sectionTitle: { fontSize: 16, fontWeight: '700', color: Colors.text, marginBottom: 4 },
   takeawayRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  takeawayDot: {
-    width: 6, height: 6, borderRadius: 3,
-    backgroundColor: Colors.accent, marginTop: 6,
-  },
+  takeawayDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.accent, marginTop: 6 },
   takeawayText: { flex: 1, fontSize: 14, color: Colors.subtext, lineHeight: 20 },
   relatedSection: { gap: 12, marginBottom: 20 },
-  relatedCard: {
-    width: 160, backgroundColor: Colors.card,
-    borderRadius: 12, overflow: 'hidden',
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  relatedThumb: {
-    height: 90, backgroundColor: Colors.input,
-    justifyContent: 'center', alignItems: 'center',
-    position: 'relative',
-  },
+  relatedCard: { width: 160, backgroundColor: Colors.card, borderRadius: 12, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border },
+  relatedThumb: { height: 90, backgroundColor: Colors.input, justifyContent: 'center', alignItems: 'center', position: 'relative' },
   relatedCat: { fontSize: 10, color: Colors.accent, fontWeight: '700' },
   relatedTitle: { fontSize: 12, fontWeight: '600', color: Colors.text, lineHeight: 16, marginTop: 2 },
   relatedDur: { fontSize: 11, color: Colors.subtext, marginTop: 4 },
-  lockedContainer: {
-    flex: 1, justifyContent: 'center', alignItems: 'center',
-    padding: 40, gap: 16,
-  },
+  lockedContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40, gap: 16 },
   lockedTitle: { fontSize: 20, fontWeight: '700', color: Colors.text, textAlign: 'center' },
   lockedSub: { fontSize: 14, color: Colors.subtext, textAlign: 'center' },
-  upgradeBtn: {
-    backgroundColor: Colors.accent, borderRadius: 12,
-    paddingHorizontal: 28, paddingVertical: 14, marginTop: 8,
-  },
+  upgradeBtn: { backgroundColor: Colors.accent, borderRadius: 12, paddingHorizontal: 28, paddingVertical: 14, marginTop: 8 },
   upgradeBtnText: { fontSize: 16, fontWeight: '700', color: Colors.bg },
 });
 
 const draw = StyleSheet.create({
-  overlay: {
-    flex: 1, backgroundColor: 'transparent',
-  },
+  overlay: { flex: 1, backgroundColor: 'transparent' },
+  captureArea: { width: SCREEN_W, height: VIDEO_H },
   canvas: { width: SCREEN_W, height: VIDEO_H },
   toolbar: {
     backgroundColor: Colors.card + 'EE',
@@ -653,31 +736,25 @@ const draw = StyleSheet.create({
   },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   toolBtn: {
-    width: 44, height: 36, borderRadius: 8,
+    width: 40, height: 36, borderRadius: 8,
     backgroundColor: Colors.input, justifyContent: 'center', alignItems: 'center',
     borderWidth: 1, borderColor: Colors.border,
   },
   toolBtnActive: { borderColor: Colors.accent, backgroundColor: Colors.accent + '22' },
-  toolIcon: { fontSize: 16 },
-  colorDot: {
-    width: 28, height: 28, borderRadius: 14,
-    borderWidth: 2, borderColor: 'transparent',
-  },
+  toolIcon: { fontSize: 14 },
+  colorDot: { width: 28, height: 28, borderRadius: 14, borderWidth: 2, borderColor: 'transparent' },
   colorDotActive: { borderColor: Colors.text, transform: [{ scale: 1.15 }] },
-  swBtn: {
-    width: 44, height: 36, borderRadius: 8,
-    backgroundColor: Colors.input, justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: Colors.border,
-  },
+  swBtn: { width: 40, height: 36, borderRadius: 8, backgroundColor: Colors.input, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: Colors.border },
   swBtnActive: { borderColor: Colors.accent },
   swLine: { width: 24, backgroundColor: Colors.text, borderRadius: 2 },
-  actionBtn: {
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 8, backgroundColor: Colors.input,
-    borderWidth: 1, borderColor: Colors.border,
-  },
+  actionBtn: { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, backgroundColor: Colors.input, borderWidth: 1, borderColor: Colors.border },
   doneBtn: { backgroundColor: Colors.accent, borderColor: Colors.accent },
-  actionText: { fontSize: 13, color: Colors.text, fontWeight: '600' },
+  actionText: { fontSize: 12, color: Colors.text, fontWeight: '600' },
+  // Text input modal
+  textModal: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000000AA', justifyContent: 'center', alignItems: 'center', padding: 24 },
+  textModalInner: { backgroundColor: Colors.card, borderRadius: 16, padding: 20, width: '100%', gap: 8 },
+  textModalLabel: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  textInput: { height: 44, backgroundColor: Colors.input, borderRadius: 10, paddingHorizontal: 12, color: Colors.text, fontSize: 14, borderWidth: 1, borderColor: Colors.border },
 });
 
 const share = StyleSheet.create({
@@ -696,7 +773,6 @@ const share = StyleSheet.create({
   optionDesc: { fontSize: 9, color: Colors.subtext, textAlign: 'center' },
   cancelBtn: { height: 48, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center', marginTop: 4 },
   cancelText: { color: Colors.subtext, fontSize: 15 },
-  // UpgradeModal 공용
   optionText: { fontSize: 16, color: Colors.text },
   option: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: Colors.border },
   cancelOption: { borderBottomWidth: 0 },
