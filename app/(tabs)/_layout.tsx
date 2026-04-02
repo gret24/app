@@ -38,7 +38,10 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="lessons"
-        options={{ href: null }}
+        options={{
+          title: 'Lessons',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="📚" focused={focused} />,
+        }}
       />
       <Tabs.Screen
         name="analysis"

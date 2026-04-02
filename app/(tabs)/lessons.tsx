@@ -1,339 +1,174 @@
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  TextInput, FlatList,
+  Image, FlatList,
 } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useSubscription } from '../../contexts/SubscriptionContext';
 import { Colors } from '../../constants/Colors';
-import { MOCK_LESSONS, Lesson, Category } from '../../data/mockData';
+import TacticsDiagram from '../../components/TacticsDiagram';
+import IceTimeDiagram from '../../components/IceTimeDiagram';
 
-type FilterCategory = 'All' | Category;
-const CATEGORIES: FilterCategory[] = ['All', 'Basics', 'Skating', 'Shooting', 'Tactics', 'Defense', 'Goalie', 'Game IQ'];
+// ── mock 시프트 데이터 (IceTimeDiagram 데모용) ──────────────
+const DEMO_SHIFTS = [
+  { shift_number: 1, start_time: 109,  end_time: 121,  duration: 12 },
+  { shift_number: 2, start_time: 203,  end_time: 224,  duration: 21 },
+  { shift_number: 3, start_time: 321,  end_time: 358,  duration: 37 },
+  { shift_number: 4, start_time: 600,  end_time: 640,  duration: 40 },
+  { shift_number: 5, start_time: 1200, end_time: 1260, duration: 60 },
+];
 
-const CATEGORY_ICON: Record<string, string> = {
-  All: '🏒', Basics: '📌', Skating: '⛸️', Shooting: '🎯',
-  Tactics: '🧠', Defense: '🛡️', Goalie: '🥅', 'Game IQ': '💡',
+// ── mock 레슨 데이터 ────────────────────────────────────────
+const LESSONS = [
+  { id: '1', title: 'Skating Fundamentals',  youtube: 'LPmGKBaRMhc', cat: 'Skating',  diff: 'Beginner',     dur: '8:32'  },
+  { id: '2', title: 'Wrist Shot Technique',   youtube: 'r5IJufntqL0', cat: 'Shooting', diff: 'Intermediate', dur: '12:15' },
+  { id: '3', title: 'Stickhandling Drills',   youtube: 'XiEBxBkBCBo', cat: 'Basics',   diff: 'Beginner',     dur: '10:04' },
+  { id: '4', title: 'Defensive Positioning',  youtube: '9kgBiMk8HMc', cat: 'Defense',  diff: 'Intermediate', dur: '15:20' },
+  { id: '5', title: 'Power Skating',          youtube: 'jF4PLbD6Ofs', cat: 'Skating',  diff: 'Advanced',     dur: '18:00' },
+  { id: '6', title: 'Puck Handling Advanced', youtube: '3HQxDMZMIVs', cat: 'Basics',   diff: 'Advanced',     dur: '14:30' },
+];
+
+const DIFF_COLOR: Record<string, string> = {
+  Beginner: '#00CC66', Intermediate: '#FFD700', Advanced: '#FF6644',
 };
 
-const DIFFICULTY_COLOR: Record<string, string> = {
-  Beginner: '#34C759',
-  Intermediate: '#FFD700',
-  Advanced: '#FF3B30',
-};
-
-function LessonCard({ lesson, isPro }: { lesson: Lesson; isPro: boolean }) {
-  const router = useRouter();
-  const locked = lesson.isPro && !isPro;
-
-  return (
-    <Pressable
-      style={styles.lessonCard}
-      onPress={() => router.push(`/lesson/${lesson.id}` as any)}
-    >
-      {/* Thumbnail */}
-      <View style={styles.thumbContainer}>
-        <View style={styles.thumb}>
-          <Text style={styles.thumbIcon}>
-            {lesson.category === 'Skating' ? '⛸️' :
-             lesson.category === 'Shooting' ? '🏒' :
-             lesson.category === 'Defense' ? '🛡️' :
-             lesson.category === 'Goalie' ? '🥅' :
-             lesson.category === 'Tactics' ? '🧠' :
-             lesson.category === 'Game IQ' ? '💡' : '📹'}
-          </Text>
-          {lesson.type === 'youtube' && (
-            <View style={styles.ytBadge}>
-              <Text style={styles.ytBadgeText}>▶ YT</Text>
-            </View>
-          )}
-        </View>
-        {locked && (
-          <View style={styles.lockOverlay}>
-            <Text style={styles.lockIcon}>🔒</Text>
-          </View>
-        )}
-        <View style={styles.durationBadge}>
-          <Text style={styles.durationText}>{lesson.duration}</Text>
-        </View>
-      </View>
-
-      {/* Info */}
-      <View style={styles.lessonInfo}>
-        <View style={styles.lessonTags}>
-          <Text style={styles.categoryTag}>{lesson.category}</Text>
-          <View style={[styles.diffBadge, { backgroundColor: DIFFICULTY_COLOR[lesson.difficulty] + '33' }]}>
-            <Text style={[styles.diffText, { color: DIFFICULTY_COLOR[lesson.difficulty] }]}>
-              {lesson.difficulty}
-            </Text>
-          </View>
-          {lesson.isPro && (
-            <View style={styles.proBadge}>
-              <Text style={styles.proText}>PRO</Text>
-            </View>
-          )}
-        </View>
-        <Text style={styles.lessonTitle} numberOfLines={2}>{lesson.title}</Text>
-      </View>
-    </Pressable>
-  );
-}
-
-function SkillDrillRow({ lesson, index, isPro }: { lesson: Lesson; index: number; isPro: boolean }) {
-  const router = useRouter();
-  const locked = lesson.isPro && !isPro;
-  const progress = [0.3, 0.6, 0.0, 0.8, 0.1][index % 5];
-
-  return (
-    <Pressable
-      style={styles.drillRow}
-      onPress={() => router.push(`/lesson/${lesson.id}` as any)}
-    >
-      <View style={styles.drillLeft}>
-        <Text style={styles.drillNum}>{String(index + 1).padStart(2, '0')}</Text>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.drillTitle} numberOfLines={1}>{lesson.title}</Text>
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${progress * 100}%` as any }]} />
-          </View>
-        </View>
-      </View>
-      <View style={styles.drillRight}>
-        <Text style={styles.drillDuration}>{lesson.duration}</Text>
-        {locked && <Text style={{ fontSize: 14 }}>🔒</Text>}
-      </View>
-    </Pressable>
-  );
-}
+type LessonsTab = 'videos' | 'tactics' | 'icetime';
 
 export default function LessonsScreen() {
-  const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState<FilterCategory>('All');
-  const { isPro } = useSubscription();
+  const router = useRouter();
+  const [activeTab, setActiveTab] = useState<LessonsTab>('videos');
 
-  const filtered = useMemo(() => {
-    return MOCK_LESSONS.filter(l => {
-      const matchCat = activeCategory === 'All' || l.category === activeCategory;
-      const matchSearch = l.title.toLowerCase().includes(search.toLowerCase()) ||
-                          l.category.toLowerCase().includes(search.toLowerCase());
-      return matchCat && matchSearch;
-    });
-  }, [search, activeCategory]);
-
-  const aiRecommended = useMemo(() => MOCK_LESSONS.filter(l => l.isPro).slice(0, 3), []);
-  const featured = useMemo(() => filtered.slice(0, 6), [filtered]);
-  const drills = useMemo(() => filtered.slice(0, 5), [filtered]);
+  const TABS: { key: LessonsTab; label: string; icon: string }[] = [
+    { key: 'videos',  label: '영상 레슨',    icon: '🎬' },
+    { key: 'tactics', label: '전술 다이어그램', icon: '🗺️' },
+    { key: 'icetime', label: '아이스타임',    icon: '⏱️' },
+  ];
 
   return (
-    <View style={styles.root}>
-      {/* Header */}
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Lessons</Text>
+    <View style={s.root}>
+      {/* 헤더 */}
+      <View style={s.header}>
+        <Text style={s.title}>📚 Lessons</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* Search */}
-        <View style={styles.searchContainer}>
-          <Text style={styles.searchIcon}>🔍</Text>
-          <TextInput
-            style={styles.searchInput}
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search lessons..."
-            placeholderTextColor={Colors.subtext}
-            autoCorrect={false}
-          />
-          {search.length > 0 && (
-            <Pressable onPress={() => setSearch('')}>
-              <Text style={styles.clearSearch}>✕</Text>
+      {/* 탭 */}
+      <View style={s.tabRow}>
+        {TABS.map(t => (
+          <Pressable
+            key={t.key}
+            style={[s.tab, activeTab === t.key && s.tabActive]}
+            onPress={() => setActiveTab(t.key)}
+          >
+            <Text style={s.tabIcon}>{t.icon}</Text>
+            <Text style={[s.tabLabel, activeTab === t.key && s.tabLabelActive]}>{t.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+
+      {/* ── 영상 레슨 ── */}
+      {activeTab === 'videos' && (
+        <FlatList
+          data={LESSONS}
+          keyExtractor={i => i.id}
+          contentContainerStyle={s.listContent}
+          renderItem={({ item }) => (
+            <Pressable style={s.lessonCard} onPress={() => router.push(`/lesson/${item.id}` as any)}>
+              {/* 썸네일 */}
+              <View style={s.thumbWrap}>
+                <Image
+                  source={{ uri: `https://img.youtube.com/vi/${item.youtube}/hqdefault.jpg` }}
+                  style={s.thumb}
+                  resizeMode="cover"
+                />
+                <View style={s.ytBadge}><Text style={s.ytBadgeText}>YT</Text></View>
+                <View style={s.durBadge}><Text style={s.durText}>{item.dur}</Text></View>
+              </View>
+              {/* 정보 */}
+              <View style={s.lessonInfo}>
+                <Text style={s.lessonTitle} numberOfLines={2}>{item.title}</Text>
+                <View style={s.tagRow}>
+                  <View style={s.catBadge}><Text style={s.catText}>{item.cat}</Text></View>
+                  <View style={[s.diffBadge, { backgroundColor: DIFF_COLOR[item.diff] + '33' }]}>
+                    <Text style={[s.diffText, { color: DIFF_COLOR[item.diff] }]}>{item.diff}</Text>
+                  </View>
+                </View>
+              </View>
             </Pressable>
           )}
-        </View>
+        />
+      )}
 
-        {/* Category Filter */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryList}
-        >
-          {CATEGORIES.map(cat => (
-            <Pressable
-              key={cat}
-              style={[styles.catChip, activeCategory === cat && styles.catChipActive]}
-              onPress={() => setActiveCategory(cat)}
-            >
-              <Text style={styles.catIcon}>{CATEGORY_ICON[cat]}</Text>
-              <Text style={[styles.catLabel, activeCategory === cat && styles.catLabelActive]}>
-                {cat}
-              </Text>
-            </Pressable>
-          ))}
+      {/* ── 전술 다이어그램 ── */}
+      {activeTab === 'tactics' && (
+        <ScrollView contentContainerStyle={s.listContent}>
+          <Text style={s.sectionTitle}>전술 패턴 애니메이션</Text>
+          <Text style={s.sectionDesc}>
+            브레이크아웃, 파워플레이, 포체크 등 주요 전술 패턴을 링크 다이어그램으로 확인하세요.
+          </Text>
+          <TacticsDiagram team="HOME" autoPlay={true} />
+          <View style={{ height: 20 }} />
+          <Text style={s.sectionTitle}>어웨이팀 시점</Text>
+          <TacticsDiagram team="AWAY" autoPlay={false} />
         </ScrollView>
+      )}
 
-        {/* AI Recommended */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>AI Recommended</Text>
-            <View style={styles.proBadge}>
-              <Text style={styles.proText}>PRO</Text>
-            </View>
-          </View>
-          <FlatList
-            horizontal
-            data={aiRecommended}
-            keyExtractor={item => item.id}
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 12, paddingRight: 20 }}
-            renderItem={({ item }) => (
-              <LessonCard lesson={item} isPro={isPro} />
-            )}
+      {/* ── 아이스타임 다이어그램 ── */}
+      {activeTab === 'icetime' && (
+        <ScrollView contentContainerStyle={s.listContent}>
+          <Text style={s.sectionTitle}>아이스타임 시프트 재생</Text>
+          <Text style={s.sectionDesc}>
+            선수의 시프트별 빙판 위 위치를 구간마다 확인하세요.
+            실제 분석 후 Videos → Ice Time Shifts에서 상세 데이터를 볼 수 있습니다.
+          </Text>
+          <IceTimeDiagram
+            shifts={DEMO_SHIFTS}
+            playerJersey="47"
+            playerTeam="HOME"
+            autoPlay={true}
           />
-        </View>
-
-        {/* Featured Lessons */}
-        <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Featured Lessons</Text>
-            <Text style={styles.countText}>{featured.length} lessons</Text>
+          <View style={s.infoCard}>
+            <Text style={s.infoIcon}>💡</Text>
+            <Text style={s.infoText}>
+              실제 경기 데이터는 Player 분석에서 영상을 선택하고 선수를 고른 후
+              Ice Time Shifts 탭에서 확인할 수 있어요.
+            </Text>
           </View>
-          {featured.length === 0 ? (
-            <View style={styles.noResults}>
-              <Text style={styles.noResultsText}>No lessons found</Text>
-            </View>
-          ) : (
-            <FlatList
-              horizontal
-              data={featured}
-              keyExtractor={item => item.id}
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ gap: 12, paddingRight: 20 }}
-              renderItem={({ item }) => (
-                <LessonCard lesson={item} isPro={isPro} />
-              )}
-            />
-          )}
-        </View>
-
-        {/* Skill Drills */}
-        <View style={[styles.section, { paddingHorizontal: 20 }]}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Skill Drills</Text>
-          </View>
-          <View style={styles.drillsCard}>
-            {drills.map((lesson, i) => (
-              <SkillDrillRow key={lesson.id} lesson={lesson} index={i} isPro={isPro} />
-            ))}
-          </View>
-        </View>
-
-        <View style={{ height: 30 }} />
-      </ScrollView>
+        </ScrollView>
+      )}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.bg },
-  header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16 },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: Colors.text },
-
-  searchContainer: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: Colors.input, borderRadius: 12,
-    marginHorizontal: 20, marginBottom: 16,
-    paddingHorizontal: 14, paddingVertical: 0,
-    borderWidth: 1, borderColor: Colors.border,
-    height: 46,
-  },
-  searchIcon: { fontSize: 16, marginRight: 8 },
-  searchInput: { flex: 1, color: Colors.text, fontSize: 15 },
-  clearSearch: { fontSize: 14, color: Colors.subtext, padding: 4 },
-
-  categoryList: { paddingHorizontal: 20, paddingBottom: 8, gap: 8 },
-  catChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    paddingHorizontal: 14, paddingVertical: 8,
-    borderRadius: 20, backgroundColor: Colors.card,
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  catChipActive: { backgroundColor: Colors.accent + '22', borderColor: Colors.accent },
-  catIcon: { fontSize: 14 },
-  catLabel: { fontSize: 13, fontWeight: '600', color: Colors.subtext },
-  catLabelActive: { color: Colors.accent },
-
-  section: { marginTop: 24, gap: 12 },
-  sectionHeader: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 20,
-  },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: Colors.text },
-  countText: { fontSize: 13, color: Colors.subtext, marginLeft: 'auto' },
-  proBadge: {
-    backgroundColor: '#FFD700' + '33',
-    borderRadius: 6, paddingHorizontal: 7, paddingVertical: 2,
-    borderWidth: 1, borderColor: '#FFD700' + '66',
-  },
-  proText: { fontSize: 10, fontWeight: '800', color: '#FFD700' },
-
-  noResults: { padding: 40, alignItems: 'center' },
-  noResultsText: { color: Colors.subtext, fontSize: 15 },
-
-  // Lesson card
-  lessonCard: {
-    width: 196,
-    backgroundColor: Colors.card,
-    borderRadius: 14, overflow: 'hidden',
-    borderWidth: 1, borderColor: Colors.border,
-    marginLeft: 20,
-  },
-  thumbContainer: { position: 'relative' },
-  thumb: {
-    height: 110, backgroundColor: Colors.input,
-    justifyContent: 'center', alignItems: 'center',
-  },
-  thumbIcon: { fontSize: 38 },
-  ytBadge: {
-    position: 'absolute', top: 8, left: 8,
-    backgroundColor: '#FF0000CC',
-    borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2,
-  },
-  ytBadgeText: { fontSize: 10, fontWeight: '700', color: '#FFF' },
-  lockOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000000AA',
-    justifyContent: 'center', alignItems: 'center',
-  },
-  lockIcon: { fontSize: 28 },
-  durationBadge: {
-    position: 'absolute', bottom: 6, right: 8,
-    backgroundColor: '#000000BB',
-    borderRadius: 5, paddingHorizontal: 5, paddingVertical: 2,
-  },
-  durationText: { fontSize: 10, color: '#FFF', fontWeight: '600' },
-  lessonInfo: { padding: 12, gap: 6 },
-  lessonTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, alignItems: 'center' },
-  categoryTag: { fontSize: 10, color: Colors.accent, fontWeight: '700' },
-  diffBadge: { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 2 },
-  diffText: { fontSize: 10, fontWeight: '700' },
-  lessonTitle: { fontSize: 13, fontWeight: '600', color: Colors.text, lineHeight: 18 },
-
-  // Drills
-  drillsCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 14, overflow: 'hidden',
-    borderWidth: 1, borderColor: Colors.border,
-  },
-  drillRow: {
-    flexDirection: 'row', alignItems: 'center',
-    padding: 14, borderBottomWidth: 1, borderBottomColor: Colors.border,
-  },
-  drillLeft: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  drillNum: { fontSize: 13, fontWeight: '700', color: Colors.subtext, width: 24 },
-  drillTitle: { fontSize: 14, fontWeight: '600', color: Colors.text, marginBottom: 6 },
-  progressBar: {
-    height: 4, backgroundColor: Colors.border, borderRadius: 2, overflow: 'hidden',
-  },
-  progressFill: { height: '100%', backgroundColor: Colors.accent, borderRadius: 2 },
-  drillRight: { flexDirection: 'row', alignItems: 'center', gap: 6, marginLeft: 8 },
-  drillDuration: { fontSize: 12, color: Colors.subtext },
+  header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 12 },
+  title: { fontSize: 26, fontWeight: '800', color: Colors.text },
+  tabRow: { flexDirection: 'row', paddingHorizontal: 16, gap: 8, marginBottom: 4 },
+  tab: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, backgroundColor: Colors.card, gap: 2 },
+  tabActive: { borderColor: Colors.accent, backgroundColor: Colors.accent + '15' },
+  tabIcon: { fontSize: 18 },
+  tabLabel: { fontSize: 11, fontWeight: '700', color: Colors.subtext, textAlign: 'center' },
+  tabLabelActive: { color: Colors.accent },
+  listContent: { padding: 16, gap: 12, paddingBottom: 40 },
+  // 레슨 카드
+  lessonCard: { backgroundColor: Colors.card, borderRadius: 14, overflow: 'hidden', borderWidth: 1, borderColor: Colors.border },
+  thumbWrap: { position: 'relative', width: '100%', aspectRatio: 16/9 },
+  thumb: { width: '100%', height: '100%' },
+  ytBadge: { position: 'absolute', top: 8, left: 8, backgroundColor: '#FF0000CC', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  ytBadgeText: { fontSize: 10, fontWeight: '800', color: 'white' },
+  durBadge: { position: 'absolute', bottom: 8, right: 8, backgroundColor: '#000000BB', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
+  durText: { fontSize: 11, color: 'white', fontWeight: '600' },
+  lessonInfo: { padding: 12, gap: 8 },
+  lessonTitle: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  tagRow: { flexDirection: 'row', gap: 6 },
+  catBadge: { backgroundColor: Colors.input, borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  catText: { fontSize: 11, color: Colors.subtext, fontWeight: '600' },
+  diffBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  diffText: { fontSize: 11, fontWeight: '700' },
+  // 섹션
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: Colors.text, marginBottom: 6 },
+  sectionDesc: { fontSize: 13, color: Colors.subtext, lineHeight: 20, marginBottom: 16 },
+  // 안내 카드
+  infoCard: { flexDirection: 'row', gap: 10, backgroundColor: Colors.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: Colors.border, marginTop: 8, alignItems: 'flex-start' },
+  infoIcon: { fontSize: 20 },
+  infoText: { flex: 1, fontSize: 13, color: Colors.subtext, lineHeight: 20 },
 });
