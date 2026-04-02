@@ -12,7 +12,7 @@
       },
       "env": {
         "APP_ENV": "development",
-        "API_URL": "http://216.81.151.44:8000"
+        "API_URL": "https://intromissible-reprovingly-santo.ngrok-free.dev"
       }
     },
     "preview": {
@@ -22,7 +22,7 @@
       },
       "env": {
         "APP_ENV": "preview",
-        "API_URL": "http://216.81.151.44:8000"
+        "API_URL": "https://intromissible-reprovingly-santo.ngrok-free.dev"
       }
     },
     "production": {

@@ -3,7 +3,7 @@ const __DEV__ = process.env.NODE_ENV !== 'production';
 
 // RunPod 서버 URL (포트 8000 노출됨)
 export const API_BASE_URL = __DEV__
-  ? 'http://216.81.151.44:8000'   // 개발: RunPod 직접 접속
+  ? 'https://intromissible-reprovingly-santo.ngrok-free.dev'   // 개발: RunPod 직접 접속
   : 'https://iceiq-api.com';       // 프로덕션 (추후 변경)
 
 // API 키
