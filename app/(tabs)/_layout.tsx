@@ -39,8 +39,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="lessons"
         options={{
-          title: 'Lessons',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="📚" focused={focused} />,
+          title: '영상레슨',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="🎬" focused={focused} />,
         }}
       />
       <Tabs.Screen

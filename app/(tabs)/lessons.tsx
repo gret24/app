@@ -47,7 +47,7 @@ export default function LessonsScreen() {
     <View style={s.root}>
       {/* 헤더 */}
       <View style={s.header}>
-        <Text style={s.title}>📚 Lessons</Text>
+        <Text style={s.title}>🎬 영상 레슨</Text>
       </View>
 
       {/* 탭 */}
