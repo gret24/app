@@ -72,6 +72,7 @@ function UpgradePlanModal({
 export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const { plan, upgrade } = useSubscription();
+  const { lang, setLang } = require('../../contexts/LanguageContext').useLang();
   const [showUpgrade, setShowUpgrade] = useState(false);
 
   const initials = (user?.displayName ?? user?.email ?? 'U')
@@ -177,6 +178,25 @@ export default function ProfileScreen() {
           </View>
         </View>
 
+        {/* 언어 선택 */}
+        <View style={p.settingsCard}>
+          <Text style={p.settingsLabel}>🌐 Language / 언어</Text>
+          <View style={p.langRow}>
+            <Pressable
+              style={[p.langBtn, lang === 'ko' && p.langBtnActive]}
+              onPress={() => setLang('ko')}
+            >
+              <Text style={[p.langText, lang === 'ko' && p.langTextActive]}>🇰🇷 한국어</Text>
+            </Pressable>
+            <Pressable
+              style={[p.langBtn, lang === 'en' && p.langBtnActive]}
+              onPress={() => setLang('en')}
+            >
+              <Text style={[p.langText, lang === 'en' && p.langTextActive]}>🇺🇸 English</Text>
+            </Pressable>
+          </View>
+        </View>
+
         {/* Sign Out */}
         <Pressable style={p.signOutBtn} onPress={handleSignOut}>
           <Text style={p.signOutText}>Sign Out</Text>
@@ -265,6 +285,13 @@ const p = StyleSheet.create({
   menuLabel: { flex: 1, fontSize: 15, color: Colors.text },
   menuArrow: { fontSize: 18, color: Colors.subtext },
 
+  settingsCard: { backgroundColor: Colors.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: Colors.border, marginBottom: 0 },
+  settingsLabel: { fontSize: 13, fontWeight: '700', color: Colors.subtext, marginBottom: 12 },
+  langRow: { flexDirection: 'row', gap: 10 },
+  langBtn: { flex: 1, height: 40, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' },
+  langBtnActive: { borderColor: Colors.accent, backgroundColor: Colors.accent + '22' },
+  langText: { fontSize: 14, color: Colors.subtext, fontWeight: '600' },
+  langTextActive: { color: Colors.accent },
   signOutBtn: {
     height: 54, borderRadius: 14,
     borderWidth: 1, borderColor: Colors.error + '55',
