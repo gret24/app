@@ -1,14 +1,15 @@
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-
-const ADMIN_EMAILS = ['hshan16hhs@gmail.com'];
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  Alert, Modal,
+  Alert, Modal, ActivityIndicator,
 } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSubscription, Plan, PLAN_DETAILS } from '../../contexts/SubscriptionContext';
 import { Colors } from '../../constants/Colors';
+import { openCheckout, openCustomerPortal } from '../../api/paymentService';
+
+const ADMIN_EMAILS = ['hshan16hhs@gmail.com'];
 
 const UPGRADE_PLANS: Plan[] = ['starter', 'pro', 'team'];
 
@@ -25,12 +26,28 @@ function UpgradePlanModal({
 }) {
   const [selected, setSelected] = useState<Plan>('pro');
   const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
 
   const handle = async () => {
     setLoading(true);
-    await onUpgrade(selected);
-    setLoading(false);
-    onClose();
+    try {
+      // Stripe 결제 시도
+      const result = await openCheckout(user?.uid ?? '', selected, user?.email ?? '');
+      if (result.success) {
+        Alert.alert('결제 완료! 🎉', '플랜이 업그레이드되었어요. 잠시 후 자동으로 반영됩니다.');
+        onClose();
+      } else if (!result.cancelled) {
+        // API 실패 시 mock으로 폴백 (개발용)
+        await onUpgrade(selected);
+        onClose();
+      }
+    } catch {
+      // 서버 연결 실패 → DEV mock
+      await onUpgrade(selected);
+      onClose();
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -76,9 +93,21 @@ export default function ProfileScreen() {
   const { user, signOut } = useAuth();
   const router = useRouter();
   const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email);
-  const { plan, upgrade } = useSubscription();
-
+  const { plan, upgrade, profile } = useSubscription();
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [portalLoading, setPortalLoading] = useState(false);
+
+  const handleManageSubscription = async () => {
+    if (!user?.uid) return;
+    setPortalLoading(true);
+    try {
+      await openCustomerPortal(user.uid);
+    } catch {
+      Alert.alert('오류', '구독 관리 페이지를 열 수 없어요. 잠시 후 다시 시도해주세요.');
+    } finally {
+      setPortalLoading(false);
+    }
+  };
 
   const initials = (user?.displayName ?? user?.email ?? 'U')
     .split(' ')
@@ -162,6 +191,18 @@ export default function ProfileScreen() {
           <Pressable style={p.upgradeBtn} onPress={() => setShowUpgrade(true)}>
             <Text style={p.upgradeBtnText}>⬆ Upgrade Plan</Text>
           </Pressable>
+          {/* 구독 중이면 관리 버튼 */}
+          {plan !== 'free' && (
+            <Pressable
+              style={[p.upgradeBtn, { backgroundColor: 'transparent', borderWidth: 1, borderColor: Colors.border }]}
+              onPress={handleManageSubscription}
+              disabled={portalLoading}
+            >
+              {portalLoading
+                ? <ActivityIndicator color={Colors.accent} />
+                : <Text style={[p.upgradeBtnText, { color: Colors.subtext }]}>⚙️ Manage Subscription</Text>}
+            </Pressable>
+          )}
         )}
 
         {/* Settings rows */}
