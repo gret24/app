@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  FlatList, Dimensions,
+  FlatList, Dimensions, ActivityIndicator,
 } from 'react-native';
+
+const API_BASE_URL = 'http://localhost:8000';
 import Svg, {
   Rect, Line, Circle, G, RadialGradient, Defs, Stop, Ellipse, Text as SvgText,
 } from 'react-native-svg';
@@ -347,8 +349,32 @@ type SubTab = 'overview' | 'zone' | 'speed';
 export default function AnalysisScreen() {
   const [selectedVideo, setSelectedVideo] = useState(MOCK_VIDEOS[0]);
   const [showVideoDrop, setShowVideoDrop] = useState(false);
+  const [players, setPlayers] = useState<Player[]>(MOCK_PLAYERS);
   const [selectedPlayer, setSelectedPlayer] = useState<Player>(MOCK_PLAYERS[0]);
   const [subTab, setSubTab] = useState<SubTab>('overview');
+  const [video_stem, setVideoStem] = useState('game1_val');
+  const [loadingPlayers, setLoadingPlayers] = useState(true);
+
+  useEffect(() => {
+    const fetchPlayers = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/players/${video_stem}`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setPlayers(data);
+          setSelectedPlayer(data[0]);
+        }
+      } catch {
+        // Network error or non-2xx — fall back to mock data silently
+        setPlayers(MOCK_PLAYERS);
+        setSelectedPlayer(MOCK_PLAYERS[0]);
+      } finally {
+        setLoadingPlayers(false);
+      }
+    };
+    fetchPlayers();
+  }, [video_stem]);
 
   return (
     <View style={as.root}>
@@ -388,9 +414,12 @@ export default function AnalysisScreen() {
         {/* Player Selector */}
         <View style={as.section}>
           <Text style={as.sectionLabel}>Select Player</Text>
+          {loadingPlayers ? (
+            <ActivityIndicator size="small" color={Colors.accent} style={{ marginVertical: 12 }} />
+          ) : (
           <FlatList
             horizontal
-            data={MOCK_PLAYERS}
+            data={players}
             keyExtractor={p => p.id}
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: 10, paddingRight: 4 }}
@@ -409,6 +438,7 @@ export default function AnalysisScreen() {
               </Pressable>
             )}
           />
+          )}
         </View>
 
         {/* Sub-tabs */}

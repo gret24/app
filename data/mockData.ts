@@ -136,7 +136,7 @@ export const MOCK_LESSONS: Lesson[] = [
       'Increase speed gradually — technique first, speed second',
     ],
     relatedIds: ['4', '1', '10'],
-    videoId: 'ZkMSVoAuHrI',
+    videoId: 'XiEBxBkBCBo',
   },
   {
     id: '7',
@@ -155,7 +155,7 @@ export const MOCK_LESSONS: Lesson[] = [
       'Lean your body forward at 30–45° during acceleration',
     ],
     relatedIds: ['1', '5', '9'],
-    videoId: '5i3xB5ExEEI',
+    videoId: '9kgBiMk8HMc',
   },
   {
     id: '8',
@@ -174,7 +174,7 @@ export const MOCK_LESSONS: Lesson[] = [
       'Net-front player must screen and look for tips/redirects',
     ],
     relatedIds: ['4', '9', '10'],
-    videoId: 'MzIJVKb_H9s',
+    videoId: 'jF4PLbD6Ofs',
   },
   {
     id: '9',
@@ -193,7 +193,7 @@ export const MOCK_LESSONS: Lesson[] = [
       'Aim for the corners, not the middle of the net',
     ],
     relatedIds: ['4', '6', '8'],
-    videoId: 'Rq1fKqRxpHw',
+    videoId: '3HQxDMZMIVs',
   },
   {
     id: '10',
@@ -212,7 +212,7 @@ export const MOCK_LESSONS: Lesson[] = [
       'Use deception (fakes, hesitations) to create time and space',
     ],
     relatedIds: ['7', '8', '5'],
-    videoId: 'j4y26DOJSAQ',
+    videoId: 'K8JLTXyHYf0',
   },
 ];
 
