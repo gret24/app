@@ -13,6 +13,7 @@ import { uploadAndAnalyze, waitForAnalysis, getPlayers, getReport } from '../../
 import { generateHighlight, getVideoStreamUrl } from '../../api/highlightService';
 import { apiPost } from '../../api/client';
 import { API_BASE_URL } from '../../api/config';
+import { Video, ResizeMode } from 'expo-av';
 import { useAuth } from '../../contexts/AuthContext';
 import { addGame, getGames, updateGame, type GameRecord } from '../../api/gamesService';
 
@@ -70,6 +71,9 @@ export default function PlayerAnalysisScreen() {
   const [shifts, setShifts] = useState<ShiftItem[]>([]);
   const [loadingShifts, setLoadingShifts] = useState(false);
   const [generatingHL, setGeneratingHL] = useState(false);
+  // 비디오 플레이어
+  const [playerUrl, setPlayerUrl] = useState<string | null>(null);
+  const [showPlayer, setShowPlayer] = useState(false);
 
   // 게임 목록 로드
   useEffect(() => {
@@ -222,13 +226,24 @@ export default function PlayerAnalysisScreen() {
 
     setGeneratingHL(true);
     try {
+      // 풀타임: 기존 분석 결과에서 바로 스트리밍
+      if (videoType === 'fulltime') {
+        const url = getVideoStreamUrl(videoPath);
+        setPlayerUrl(url);
+        setShowPlayer(true);
+        setGeneratingHL(false);
+        return;
+      }
+      // 하이라이트: 서버에서 생성 후 재생
       const result = await generateHighlight(
         videoPath, videoStem, selectedPlayer.jersey,
         { gap: 30, buf: 5 }
       );
-      Alert.alert('하이라이트 완성!', `${result.shifts}개 시프트 · ${result.total_ice_time_min.toFixed(1)}분\n\n영상 URL이 클립보드에 복사됐어요.`);
+      const streamUrl = getVideoStreamUrl(result.file_path);
+      setPlayerUrl(streamUrl);
+      setShowPlayer(true);
     } catch (e: any) {
-      Alert.alert('오류', e.message || '하이라이트 생성 실패');
+      Alert.alert('오류', e.message || '영상 생성 실패');
     } finally {
       setGeneratingHL(false);
     }
@@ -452,6 +467,61 @@ export default function PlayerAnalysisScreen() {
 
   // ── STEP 4: 옵션 선택 + 다이어그램 ───────────────────────
   return (
+    <>
+    {/* 인앱 비디오 플레이어 모달 */}
+    <Modal visible={showPlayer} animationType="slide" statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, paddingTop: 56 }}>
+          <Text style={{ color: '#fff', fontSize: 16, fontWeight: '700' }}>
+            {videoType === 'fulltime' ? '🏒 풀게임' : videoType === 'highlight' ? '🎬 하이라이트' : '⏱️ 아이스타임'}
+            {' '}— #{selectedPlayer?.jersey}
+          </Text>
+          <Pressable onPress={() => setShowPlayer(false)} style={{ padding: 8 }}>
+            <Text style={{ color: '#fff', fontSize: 22 }}>✕</Text>
+          </Pressable>
+        </View>
+        {playerUrl ? (
+          <Video
+            source={{ uri: playerUrl }}
+            style={{ width: '100%', flex: 1 }}
+            resizeMode={ResizeMode.CONTAIN}
+            shouldPlay
+            useNativeControls
+            onError={(e) => Alert.alert('재생 오류', String(e))}
+          />
+        ) : (
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <ActivityIndicator color={Colors.accent} size="large" />
+            <Text style={{ color: Colors.subtext, marginTop: 12 }}>영상 로딩 중...</Text>
+          </View>
+        )}
+        {/* 영상 타입 전환 탭 */}
+        <View style={{ flexDirection: 'row', backgroundColor: '#111', paddingBottom: 32 }}>
+          {[
+            { type: 'highlight' as VideoType, icon: '🎬', label: '하이라이트' },
+            { type: 'fulltime' as VideoType,  icon: '🏒', label: '풀게임' },
+            { type: 'shifts' as VideoType,    icon: '⏱️', label: '아이스타임' },
+          ].map(opt => (
+            <Pressable
+              key={opt.type}
+              style={{ flex: 1, alignItems: 'center', paddingVertical: 14,
+                borderTopWidth: videoType === opt.type ? 2 : 0,
+                borderTopColor: Colors.accent }}
+              onPress={() => {
+                setVideoType(opt.type);
+                setShowPlayer(false);
+                if (opt.type !== 'shifts') setTimeout(() => handlePlay(), 100);
+                else { loadShifts(); }
+              }}
+            >
+              <Text style={{ fontSize: 20 }}>{opt.icon}</Text>
+              <Text style={{ fontSize: 11, color: videoType === opt.type ? Colors.accent : '#888', marginTop: 2, fontWeight: '600' }}>{opt.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </Modal>
+
     <ScrollView style={s.root} contentContainerStyle={s.container}>
       <View style={s.header}>
         <Pressable onPress={() => setStep('select_player')}><Text style={s.backBtn}>‹</Text></Pressable>
@@ -531,6 +601,7 @@ export default function PlayerAnalysisScreen() {
       )}
       <View style={{ height: 40 }} />
     </ScrollView>
+    </>
   );
 }
 
