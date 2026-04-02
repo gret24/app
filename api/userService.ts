@@ -6,12 +6,14 @@ import {
 import { db } from '../lib/firebase';
 
 export type Plan = 'free' | 'starter' | 'pro' | 'team';
+export type UserRole = 'player' | 'coach' | 'team';
 
 export interface UserProfile {
   uid: string;
   displayName: string;
   email: string;
   teamName?: string;
+  role?: UserRole;         // player / coach / team
   plan: Plan;
   planStartDate?: Timestamp;
   planEndDate?: Timestamp | null;
@@ -56,7 +58,7 @@ const getMonthStart = () => {
 
 // 사용자 프로필 생성 (회원가입 시)
 export const createUserProfile = async (
-  uid: string, email: string, displayName: string, teamName?: string
+  uid: string, email: string, displayName: string, teamName?: string, role?: UserRole
 ) => {
   const ref = doc(db, 'users', uid);
   const snap = await getDoc(ref);
@@ -64,6 +66,7 @@ export const createUserProfile = async (
     await setDoc(ref, {
       displayName, email,
       ...(teamName ? { teamName } : {}),
+      ...(role ? { role } : {}),
       plan: 'free',
       planStartDate: serverTimestamp(),
       planEndDate: null,

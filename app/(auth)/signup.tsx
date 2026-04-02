@@ -7,8 +7,15 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSubscription, Plan, PLAN_DETAILS } from '../../contexts/SubscriptionContext';
 import { Colors } from '../../constants/Colors';
+import type { UserRole } from '../../api/userService';
 
 const PLANS: Plan[] = ['free', 'starter', 'pro', 'team'];
+
+const ROLES: { key: UserRole; label: string; icon: string; desc: string }[] = [
+  { key: 'player',  label: 'Player',  icon: '🏒', desc: '내 출전 영상 & 아이스타임 분석' },
+  { key: 'coach',   label: 'Coach',   icon: '📋', desc: '팀 전술 분석 & AI 리포트' },
+  { key: 'team',    label: 'Team',    icon: '🏟️', desc: '팀 관리 & 다중 선수 분석' },
+];
 
 export default function SignUpScreen() {
   const [name, setName] = useState('');
@@ -16,6 +23,7 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [team, setTeam] = useState('');
+  const [role, setRole] = useState<UserRole>('player');
   const [selectedPlan, setSelectedPlan] = useState<Plan>('free');
   const [loading, setLoading] = useState(false);
   const { signUp } = useAuth();
@@ -29,7 +37,7 @@ export default function SignUpScreen() {
     }
     setLoading(true);
     try {
-      await signUp(email, password, name, team);
+      await signUp(email, password, name, team, role);
       if (selectedPlan !== 'free') {
         await upgrade(selectedPlan);
       }
@@ -75,6 +83,27 @@ export default function SignUpScreen() {
               />
             </View>
           ))}
+
+          {/* Role Selector */}
+          <View style={styles.planSection}>
+            <Text style={styles.planTitle}>내 역할 선택</Text>
+            <View style={{ gap: 8 }}>
+              {ROLES.map(r => (
+                <Pressable
+                  key={r.key}
+                  style={[styles.roleCard, role === r.key && styles.roleCardActive]}
+                  onPress={() => setRole(r.key)}
+                >
+                  <Text style={styles.roleIcon}>{r.icon}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.roleLabel, role === r.key && { color: Colors.accent }]}>{r.label}</Text>
+                    <Text style={styles.roleDesc}>{r.desc}</Text>
+                  </View>
+                  {role === r.key && <Text style={{ color: Colors.accent, fontSize: 18 }}>✓</Text>}
+                </Pressable>
+              ))}
+            </View>
+          </View>
 
           {/* Plan Selector */}
           <View style={styles.planSection}>
@@ -154,6 +183,11 @@ const styles = StyleSheet.create({
   planSection: { marginTop: 8, gap: 12 },
   planTitle: { fontSize: 16, fontWeight: '700', color: Colors.text },
   planGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  roleCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: Colors.border },
+  roleCardActive: { borderColor: Colors.accent, backgroundColor: Colors.accent + '15' },
+  roleIcon: { fontSize: 26 },
+  roleLabel: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  roleDesc: { fontSize: 12, color: Colors.subtext, marginTop: 2 },
   planCard: {
     width: '47%',
     backgroundColor: Colors.card,

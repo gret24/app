@@ -22,7 +22,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, name: string, team?: string) => Promise<void>;
+  signUp: (email: string, password: string, name: string, team?: string, role?: string) => Promise<void>;
   signOut: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
 }
@@ -57,12 +57,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await signInWithEmailAndPassword(auth, email, password);
   };
 
-  const signUp = async (email: string, password: string, name: string, team?: string) => {
+  const signUp = async (email: string, password: string, name: string, team?: string, role?: string) => {
     if (!email || !password || !name) throw new Error('필수 항목을 입력해주세요');
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await updateProfile(cred.user, { displayName: name });
-    // Firestore에 사용자 프로필 생성
-    try { await createUserProfile(cred.user.uid, email, name); } catch (_) {}
+    // Firestore에 사용자 프로필 생성 (role 포함)
+    try { await createUserProfile(cred.user.uid, email, name, team, role as any); } catch (_) {}
   };
 
   const signOut = async () => {

@@ -13,6 +13,8 @@ import { uploadAndAnalyze, waitForAnalysis, getPlayers, getReport } from '../../
 import { generateHighlight, getVideoStreamUrl } from '../../api/highlightService';
 import { apiPost } from '../../api/client';
 import { API_BASE_URL } from '../../api/config';
+import { useAuth } from '../../contexts/AuthContext';
+import { addGame, getGames, updateGame, type GameRecord } from '../../api/gamesService';
 
 type AppStep = 'input' | 'analyzing' | 'select_player' | 'select_option';
 type VideoType = 'highlight' | 'fulltime' | 'shifts';
@@ -37,8 +39,14 @@ const fmtTime = (sec: number) => `${Math.floor(sec/60)}:${String(Math.floor(sec%
 
 export default function PlayerAnalysisScreen() {
   const router = useRouter();
+  const { user } = useAuth();
   const { players: rosterPlayers, addPlayer } = useRoster();
   const [showForm, setShowForm] = useState(false);
+
+  // 내 게임 목록
+  const [myGames, setMyGames] = useState<GameRecord[]>([]);
+  const [loadingGames, setLoadingGames] = useState(true);
+  const [currentGameId, setCurrentGameId] = useState<string | null>(null);
 
   // 분석 흐름
   const [step, setStep] = useState<AppStep>('input');
@@ -59,6 +67,15 @@ export default function PlayerAnalysisScreen() {
   const [shifts, setShifts] = useState<ShiftItem[]>([]);
   const [loadingShifts, setLoadingShifts] = useState(false);
   const [generatingHL, setGeneratingHL] = useState(false);
+
+  // 게임 목록 로드
+  useEffect(() => {
+    if (!user?.uid) { setLoadingGames(false); return; }
+    getGames(user.uid).then(games => {
+      setMyGames(games);
+      setLoadingGames(false);
+    }).catch(() => setLoadingGames(false));
+  }, [user?.uid]);
 
   const animateProgress = (to: number) => {
     Animated.timing(progressAnim, { toValue: to, duration: 400, useNativeDriver: false }).start();
@@ -124,6 +141,16 @@ export default function PlayerAnalysisScreen() {
 
       setVideoStem(stem);
       setVideoPath(vpath || `${API_BASE_URL}/uploads/${stem}`);
+      // Firestore에 게임 저장
+      if (user?.uid) {
+        const gid = await addGame(user.uid, {
+          videoStem: stem,
+          title: input.includes('youtube') ? `YouTube - ${stem}` : stem,
+          youtubeUrl: input.includes('youtube') ? input : undefined,
+          status: 'analyzing',
+        });
+        setCurrentGameId(gid);
+      }
       animateProgress(20);
       setProgressMsg('AI 분석 중...');
 
@@ -156,6 +183,15 @@ export default function PlayerAnalysisScreen() {
       } catch {
         setPlayers(mapped);
       }
+      // 게임 상태 완료로 업데이트
+      if (user?.uid && currentGameId) {
+        updateGame(user.uid, currentGameId, {
+          status: 'done',
+          playerCount: players.length,
+        }).catch(() => {});
+      }
+      // 게임 목록 갱신
+      if (user?.uid) getGames(user.uid).then(setMyGames).catch(() => {});
       setStep('select_player');
     } catch (e: any) {
       Alert.alert('분석 실패', e.message || '서버 연결을 확인해주세요');
@@ -251,6 +287,47 @@ export default function PlayerAnalysisScreen() {
         <Pressable style={s.analyzeBtn} onPress={startAnalysis}>
           <Text style={s.analyzeBtnText}>🔍 분석 시작</Text>
         </Pressable>
+
+        {/* 내 게임 목록 */}
+        {(myGames.length > 0 || loadingGames) && (
+          <View style={{ marginTop: 24 }}>
+            <Text style={s.sectionHeader}>📂 내 분석 기록</Text>
+            {loadingGames ? (
+              <ActivityIndicator color={Colors.accent} />
+            ) : (
+              <View style={{ gap: 8 }}>
+                {myGames.map(game => (
+                  <Pressable
+                    key={game.id}
+                    style={s.gameCard}
+                    onPress={() => {
+                      setVideoStem(game.videoStem);
+                      setVideoPath(`${API_BASE_URL}/uploads/${game.videoStem}`);
+                      setStep('select_player');
+                      // 선수 목록 다시 로드
+                      getPlayers(game.videoStem).then(data => {
+                        setPlayers(data.players.map(p => ({
+                          jersey: p.jersey,
+                          team: Object.keys(p.teams ?? {})[0] ?? 'HOME',
+                          total_ice_time_min: 0, total_shifts: 0, total_ice_time_sec: 0,
+                        })));
+                      }).catch(() => {});
+                    }}
+                  >
+                    <View style={s.gameCardLeft}>
+                      <Text style={s.gameTitle}>{game.title}</Text>
+                      <Text style={s.gameMeta}>
+                        {game.status === 'done' ? `✅ ${game.playerCount ?? 0}명 감지` : '⏳ 분석 중'}
+                      </Text>
+                    </View>
+                    <Text style={s.chevron}>›</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
         <View style={{ height: 40 }} />
       </ScrollView>
     </>
@@ -498,4 +575,9 @@ const s = StyleSheet.create({
   shiftTime: { fontSize: 13, fontWeight: '600', color: Colors.text },
   shiftDur: { fontSize: 11, color: Colors.subtext },
   shiftBar: { height: 4, borderRadius: 2, backgroundColor: Colors.accent, opacity: 0.5 },
+  sectionHeader: { fontSize: 14, fontWeight: '700', color: Colors.subtext, marginBottom: 10, letterSpacing: 0.5 },
+  gameCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: Colors.border },
+  gameCardLeft: { flex: 1 },
+  gameTitle: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  gameMeta: { fontSize: 12, color: Colors.subtext, marginTop: 2 },
 });
