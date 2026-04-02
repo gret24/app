@@ -10,7 +10,7 @@ type TeamSide = 'HOME' | 'AWAY';
 type TeamMenu = 'tactics' | 'recommendation' | 'players';
 type Position = 'ALL' | 'LW' | 'RW' | 'C' | 'D' | 'G';
 type SpeedFilter = 'ALL' | 'fast' | 'normal' | 'slow';
-type AgeFilter = 'ALL' | 'U18' | '18-25' | '26-32' | '33+';
+type AgeFilter = 'ALL' | 'U8' | 'U10' | 'U12' | 'U14' | 'U16' | 'U18' | '18-25' | '26-32' | '33+';
 
 interface PlayerStats {
   jersey: string;
@@ -58,7 +58,13 @@ const getSpeed = (p: PlayerStats): 'fast' | 'normal' | 'slow' => {
   if (avg < 90) return 'normal';
   return 'slow';
 };
-const getAgeGroup = (age: number): '18-25' | '26-32' | '33+' | 'U18' => {
+const getAgeGroup = (age: number): AgeFilter => {
+  if (age < 8)  return 'U8';
+  if (age < 10) return 'U8';
+  if (age < 12) return 'U10';
+  if (age < 14) return 'U12';
+  if (age < 16) return 'U14';
+  if (age < 18) return 'U16';
   if (age < 18) return 'U18';
   if (age <= 25) return '18-25';
   if (age <= 32) return '26-32';
@@ -311,10 +317,18 @@ export default function TeamScreen() {
               {/* 나이대 필터 */}
               <Text style={styles.filterLabel}>나이대</Text>
               <View style={[styles.filterRow, { marginBottom: 16 }]}>
-                {(['ALL','U18','18-25','26-32','33+'] as AgeFilter[]).map(a => (
+                {(['ALL','U8','U10','U12','U14','U16','U18','18-25','26-32','33+'] as AgeFilter[]).map(a => (
                   <Pressable key={a} style={[styles.filterChip, ageFilter===a && styles.filterChipActive]} onPress={() => setAgeFilter(a)}>
                     <Text style={[styles.filterChipText, ageFilter===a && styles.filterChipTextActive]}>
-                      {a==='ALL'?'전체': a==='U18'?'~17세': a==='18-25'?'18~25세': a==='26-32'?'26~32세':'33세~'}
+                      {a==='ALL'?'전체':
+                       a==='U8'?'U8 (~7세)':
+                       a==='U10'?'U10 (8~9세)':
+                       a==='U12'?'U12 (10~11세)':
+                       a==='U14'?'U14 (12~13세)':
+                       a==='U16'?'U16 (14~15세)':
+                       a==='U18'?'U18 (16~17세)':
+                       a==='18-25'?'18~25세':
+                       a==='26-32'?'26~32세':'33세~'}
                     </Text>
                   </Pressable>
                 ))}
