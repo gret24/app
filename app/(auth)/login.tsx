@@ -12,6 +12,7 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [keepLogin, setKeepLogin] = useState(true);
   const { signIn } = useAuth();
   const router = useRouter();
 
@@ -67,9 +68,18 @@ export default function LoginScreen() {
             />
           </View>
 
-          <Pressable onPress={() => router.push('/(auth)/forgot-password')} style={styles.forgotWrap}>
-            <Text style={styles.forgotText}>Forgot Password?</Text>
-          </Pressable>
+          {/* 로그인 유지 + 비밀번호 찾기 */}
+          <View style={styles.rememberRow}>
+            <Pressable style={styles.checkRow} onPress={() => setKeepLogin(v => !v)}>
+              <View style={[styles.checkbox, keepLogin && styles.checkboxOn]}>
+                {keepLogin && <Text style={styles.checkmark}>✓</Text>}
+              </View>
+              <Text style={styles.rememberText}>로그인 유지</Text>
+            </Pressable>
+            <Pressable onPress={() => router.push('/(auth)/forgot-password')}>
+              <Text style={styles.forgotText}>비밀번호 찾기</Text>
+            </Pressable>
+          </View>
 
           <Pressable
             style={({ pressed }) => [styles.btn, (pressed || loading) && { opacity: 0.8 }]}
@@ -129,6 +139,12 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: Colors.border,
   },
   forgotWrap: { alignSelf: 'flex-end', marginTop: -4 },
+  rememberRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: -4 },
+  checkRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  checkbox: { width: 20, height: 20, borderRadius: 5, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.input, justifyContent: 'center', alignItems: 'center' },
+  checkboxOn: { backgroundColor: Colors.accent, borderColor: Colors.accent },
+  checkmark: { fontSize: 12, color: Colors.bg, fontWeight: '800' },
+  rememberText: { fontSize: 13, color: Colors.subtext },
   forgotText: { color: Colors.accent, fontSize: 13 },
   btn: {
     height: 52, borderRadius: 12, marginTop: 8,
