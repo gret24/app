@@ -65,7 +65,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     apiUrl: process.env.API_URL ?? 'http://216.81.151.44:8000',
     environment: process.env.APP_ENV ?? 'development',
     eas: {
-      projectId: process.env.EAS_PROJECT_ID ?? '',
+      projectId: 'c4d1fab2-919a-4e03-9028-2eb17e0ad739',
     },
   },
   owner: 'gret24',

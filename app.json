@@ -9,9 +9,20 @@
     "splash": {
       "backgroundColor": "#0A0A0F"
     },
-    "ios": { "supportsTablet": true },
-    "android": { "adaptiveIcon": { "backgroundColor": "#0A0A0F" } },
-    "web": { "bundler": "metro" },
-    "plugins": ["expo-router", "expo-secure-store"]
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0A0A0F"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ]
   }
 }
