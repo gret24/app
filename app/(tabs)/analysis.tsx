@@ -7,7 +7,7 @@ import {
 import { getPlayers as apiGetPlayers, getReport as apiGetReport } from '../../api/analysisService';
 import { apiGet } from '../../api/client';
 import Svg, {
-  Rect, Line, Circle, G, RadialGradient, Defs, Stop, Ellipse, Text as SvgText, Polyline,
+  Rect, Line, Circle, G, RadialGradient, Defs, Stop, Ellipse, Text as SvgText, Polyline, Polygon,
 } from 'react-native-svg';
 import { Colors } from '../../constants/Colors';
 import { MOCK_PLAYERS, MOCK_ZONE_DATA, MOCK_OVERVIEW, Player } from '../../data/mockData';
@@ -520,6 +520,276 @@ const sp = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────
+// Progress Tab
+// ─────────────────────────────────────────────
+type PeriodFilter = 'last5' | 'last10' | 'season';
+
+const PROGRESS_MOCK_GAMES = [
+  { date: 'Mar 5',  avgSpeed: 18.2, distance: 4.1, iceTime: 14.5, oZone: 38, nZone: 32, dZone: 30 },
+  { date: 'Mar 10', avgSpeed: 19.0, distance: 4.4, iceTime: 15.2, oZone: 40, nZone: 30, dZone: 30 },
+  { date: 'Mar 15', avgSpeed: 18.7, distance: 4.3, iceTime: 14.8, oZone: 35, nZone: 35, dZone: 30 },
+  { date: 'Mar 20', avgSpeed: 20.1, distance: 4.8, iceTime: 16.1, oZone: 42, nZone: 28, dZone: 30 },
+  { date: 'Mar 28', avgSpeed: 21.3, distance: 5.2, iceTime: 17.0, oZone: 45, nZone: 27, dZone: 28 },
+];
+
+function pctChange(arr: number[]) {
+  if (arr.length < 2) return 0;
+  const first = arr[0], last = arr[arr.length - 1];
+  if (first === 0) return 0;
+  return Math.round(((last - first) / first) * 100);
+}
+
+function LineChart({
+  data, color, width = 280, height = 72, label,
+}: { data: number[]; color: string; width?: number; height?: number; label: string }) {
+  if (data.length < 2) return null;
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+  const PAD = 4;
+  const pts = data.map((v, i) => {
+    const x = PAD + (i / (data.length - 1)) * (width - PAD * 2);
+    const y = PAD + height - PAD * 2 - ((v - min) / range) * (height - PAD * 2);
+    return `${x},${y}`;
+  });
+  const change = pctChange(data);
+  const changeColor = change >= 0 ? '#34C759' : '#FF3B30';
+  const arrow = change >= 0 ? '▲' : '▼';
+
+  return (
+    <View style={pg.chartCard}>
+      <View style={pg.chartHeader}>
+        <Text style={pg.chartLabel}>{label}</Text>
+        <Text style={[pg.chartChange, { color: changeColor }]}>
+          {arrow} {Math.abs(change)}%
+        </Text>
+      </View>
+      <Svg width={width} height={height}>
+        <Polyline points={pts.join(' ')} fill="none" stroke={color} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round" />
+        {pts.map((pt, i) => {
+          const [x, y] = pt.split(',').map(Number);
+          return <Circle key={i} cx={x} cy={y} r={3} fill={color} />;
+        })}
+      </Svg>
+      <View style={pg.chartXLabels}>
+        {data.map((_, i) => i === 0 || i === data.length - 1 ? null : null).filter(Boolean)}
+      </View>
+    </View>
+  );
+}
+
+function BarChart({
+  data, color, width = 280, height = 72, label,
+}: { data: number[]; color: string; width?: number; height?: number; label: string }) {
+  if (data.length === 0) return null;
+  const max = Math.max(...data) || 1;
+  const barW = (width / data.length) * 0.6;
+  const gap = width / data.length;
+  const change = pctChange(data);
+  const changeColor = change >= 0 ? '#34C759' : '#FF3B30';
+  const arrow = change >= 0 ? '▲' : '▼';
+
+  return (
+    <View style={pg.chartCard}>
+      <View style={pg.chartHeader}>
+        <Text style={pg.chartLabel}>{label}</Text>
+        <Text style={[pg.chartChange, { color: changeColor }]}>
+          {arrow} {Math.abs(change)}%
+        </Text>
+      </View>
+      <Svg width={width} height={height}>
+        {data.map((v, i) => {
+          const barH = (v / max) * (height - 8);
+          const x = i * gap + (gap - barW) / 2;
+          const y = height - barH;
+          return <Rect key={i} x={x} y={y} width={barW} height={barH} rx={3} fill={color} fillOpacity={0.85} />;
+        })}
+      </Svg>
+    </View>
+  );
+}
+
+function ZoneStackedChart({
+  games, width = 280, height = 72,
+}: { games: typeof PROGRESS_MOCK_GAMES; width?: number; height?: number }) {
+  const n = games.length;
+  if (n === 0) return null;
+  // Build stacked area polygons for O (top), N (mid), D (bottom)
+  // Each zone occupies its percentage of height per game
+  // We'll draw 3 filled polygons
+  const xs = games.map((_, i) => (i / (n - 1)) * width);
+
+  // bottom of each zone (cumulative from top)
+  const oBottoms = games.map(g => (g.oZone / 100) * height);
+  const nBottoms = games.map(g => ((g.oZone + g.nZone) / 100) * height);
+
+  // O zone: top=0, bottom=oBottoms
+  const oPts = [
+    ...xs.map((x, i) => `${x},0`),
+    ...[...xs].reverse().map((x, i) => `${x},${oBottoms[n - 1 - i]}`),
+  ].join(' ');
+  // N zone: top=oBottoms, bottom=nBottoms
+  const nPts = [
+    ...xs.map((x, i) => `${x},${oBottoms[i]}`),
+    ...[...xs].reverse().map((x, i) => `${x},${nBottoms[n - 1 - i]}`),
+  ].join(' ');
+  // D zone: top=nBottoms, bottom=height
+  const dPts = [
+    ...xs.map((x, i) => `${x},${nBottoms[i]}`),
+    ...[...xs].reverse().map((x) => `${x},${height}`),
+  ].join(' ');
+
+  return (
+    <View style={pg.chartCard}>
+      <View style={pg.chartHeader}>
+        <Text style={pg.chartLabel}>Zone Distribution</Text>
+        <View style={pg.zoneLegendRow}>
+          {[['#FF3B30','O'],['#FFD700','N'],['#007AFF','D']].map(([c,l]) => (
+            <View key={l} style={pg.zoneLegendItem}>
+              <View style={[pg.zoneDot, { backgroundColor: c }]} />
+              <Text style={pg.zoneLegendText}>{l}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+      <Svg width={width} height={height}>
+        <Polygon points={oPts} fill="#FF3B30" fillOpacity={0.7} />
+        <Polygon points={nPts} fill="#FFD700" fillOpacity={0.7} />
+        <Polygon points={dPts} fill="#007AFF" fillOpacity={0.7} />
+      </Svg>
+    </View>
+  );
+}
+
+function ProgressTab() {
+  const [period, setPeriod] = useState<PeriodFilter>('last5');
+
+  const allGames = PROGRESS_MOCK_GAMES;
+  const games =
+    period === 'last5' ? allGames.slice(-5) :
+    period === 'last10' ? allGames.slice(-10) :
+    allGames;
+
+  const hasData = games.length >= 2;
+
+  const avgSpeeds   = games.map(g => g.avgSpeed);
+  const distances   = games.map(g => g.distance);
+  const iceTimes    = games.map(g => g.iceTime);
+
+  const bestGame    = games.reduce((a, b) => a.avgSpeed > b.avgSpeed ? a : b, games[0]);
+  const worstGame   = games.reduce((a, b) => a.avgSpeed < b.avgSpeed ? a : b, games[0]);
+  const speedChange = pctChange(avgSpeeds);
+
+  const CHART_W = SCREEN_W - 80;
+
+  return (
+    <ScrollView showsVerticalScrollIndicator={false}>
+      <View style={pg.container}>
+        {/* Period filter */}
+        <View style={pg.filterRow}>
+          {([['last5','Last 5'],['last10','Last 10'],['season','Season']] as [PeriodFilter,string][]).map(([key, lbl]) => (
+            <Pressable
+              key={key}
+              style={[pg.filterBtn, period === key && pg.filterBtnActive]}
+              onPress={() => setPeriod(key)}
+            >
+              <Text style={[pg.filterBtnText, period === key && pg.filterBtnTextActive]}>{lbl}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {!hasData ? (
+          <View style={pg.placeholder}>
+            <Text style={pg.placeholderIcon}>📈</Text>
+            <Text style={pg.placeholderTitle}>Upload more games to see your progress</Text>
+            <Text style={pg.placeholderSub}>At least 2 games are required to show trends.</Text>
+          </View>
+        ) : (
+          <>
+            {/* Summary cards */}
+            <View style={pg.summaryRow}>
+              <View style={[pg.summaryCard, { borderTopColor: '#34C759' }]}>
+                <Text style={pg.summaryCardIcon}>🏆</Text>
+                <Text style={pg.summaryCardLabel}>Best Performance</Text>
+                <Text style={pg.summaryCardVal}>{bestGame.date}</Text>
+                <Text style={pg.summaryCardSub}>{bestGame.avgSpeed} km/h avg</Text>
+              </View>
+              <View style={[pg.summaryCard, { borderTopColor: Colors.accent }]}>
+                <Text style={pg.summaryCardIcon}>📈</Text>
+                <Text style={pg.summaryCardLabel}>Most Improved</Text>
+                <Text style={pg.summaryCardVal}>Avg Speed</Text>
+                <Text style={[pg.summaryCardSub, { color: speedChange >= 0 ? '#34C759' : '#FF3B30' }]}>
+                  {speedChange >= 0 ? '+' : ''}{speedChange}%
+                </Text>
+              </View>
+              <View style={[pg.summaryCard, { borderTopColor: '#FF3B30' }]}>
+                <Text style={pg.summaryCardIcon}>⚠️</Text>
+                <Text style={pg.summaryCardLabel}>Watch Out</Text>
+                <Text style={pg.summaryCardVal}>{worstGame.date}</Text>
+                <Text style={pg.summaryCardSub}>Low performance</Text>
+              </View>
+            </View>
+
+            {/* Charts */}
+            <LineChart data={avgSpeeds}  color={Colors.accent} width={CHART_W} label="Avg Speed (km/h)" />
+            <LineChart data={distances}  color="#34C759"       width={CHART_W} label="Total Distance (km)" />
+            <BarChart  data={iceTimes}   color="#AF52DE"       width={CHART_W} label="Ice Time (min)" />
+            <ZoneStackedChart games={games} width={CHART_W} />
+
+            {/* Game date labels */}
+            <View style={pg.dateRow}>
+              {games.map((g, i) => (
+                <Text key={i} style={pg.dateLabel}>{g.date}</Text>
+              ))}
+            </View>
+          </>
+        )}
+      </View>
+    </ScrollView>
+  );
+}
+
+const pg = StyleSheet.create({
+  container: { gap: 16, paddingTop: 8 },
+  filterRow: { flexDirection: 'row', gap: 8 },
+  filterBtn: {
+    flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center',
+    backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.border,
+  },
+  filterBtnActive: { backgroundColor: Colors.accent + '22', borderColor: Colors.accent },
+  filterBtnText: { fontSize: 13, fontWeight: '600', color: Colors.subtext },
+  filterBtnTextActive: { color: Colors.accent },
+  placeholder: { paddingVertical: 60, alignItems: 'center', gap: 10 },
+  placeholderIcon: { fontSize: 48 },
+  placeholderTitle: { fontSize: 15, fontWeight: '700', color: Colors.text, textAlign: 'center' },
+  placeholderSub: { fontSize: 13, color: Colors.subtext, textAlign: 'center' },
+  summaryRow: { flexDirection: 'row', gap: 10 },
+  summaryCard: {
+    flex: 1, backgroundColor: Colors.card, borderRadius: 12,
+    padding: 12, alignItems: 'center', gap: 3,
+    borderWidth: 1, borderColor: Colors.border, borderTopWidth: 3,
+  },
+  summaryCardIcon: { fontSize: 18 },
+  summaryCardLabel: { fontSize: 10, color: Colors.subtext, textAlign: 'center' },
+  summaryCardVal: { fontSize: 13, fontWeight: '700', color: Colors.text },
+  summaryCardSub: { fontSize: 11, color: Colors.subtext },
+  chartCard: {
+    backgroundColor: Colors.card, borderRadius: 14,
+    padding: 16, borderWidth: 1, borderColor: Colors.border, gap: 10,
+  },
+  chartHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  chartLabel: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  chartChange: { fontSize: 13, fontWeight: '700' },
+  chartXLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+  zoneLegendRow: { flexDirection: 'row', gap: 8 },
+  zoneLegendItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  zoneDot: { width: 8, height: 8, borderRadius: 4 },
+  zoneLegendText: { fontSize: 11, color: Colors.subtext },
+  dateRow: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 4 },
+  dateLabel: { fontSize: 10, color: Colors.subtext, flex: 1, textAlign: 'center' },
+});
+
+// ─────────────────────────────────────────────
 // Main AnalysisScreen
 // ─────────────────────────────────────────────
 const MOCK_VIDEOS = [
@@ -528,7 +798,7 @@ const MOCK_VIDEOS = [
   { id: 'v3', label: 'Game vs Wolves — Mar 20' },
 ];
 
-type SubTab = 'overview' | 'zone' | 'speed';
+type SubTab = 'overview' | 'zone' | 'speed' | 'progress';
 
 export default function AnalysisScreen() {
   const [selectedVideo, setSelectedVideo] = useState(MOCK_VIDEOS[0]);
@@ -629,14 +899,14 @@ export default function AnalysisScreen() {
 
         {/* Sub-tabs */}
         <View style={as.subTabs}>
-          {(['overview', 'zone', 'speed'] as SubTab[]).map(t => (
+          {(['overview', 'zone', 'speed', 'progress'] as SubTab[]).map(t => (
             <Pressable
               key={t}
               style={[as.subTab, subTab === t && as.subTabActive]}
               onPress={() => setSubTab(t)}
             >
               <Text style={[as.subTabText, subTab === t && as.subTabTextActive]}>
-                {t === 'overview' ? 'Overview' : t === 'zone' ? 'Zone Analysis' : 'Speed'}
+                {t === 'overview' ? 'Overview' : t === 'zone' ? 'Zone' : t === 'speed' ? 'Speed' : 'Progress'}
               </Text>
             </Pressable>
           ))}
@@ -648,6 +918,7 @@ export default function AnalysisScreen() {
         {subTab === 'speed' && (
           <SpeedTab videoStem={video_stem} playerNumber={String(selectedPlayer.number)} />
         )}
+        {subTab === 'progress' && <ProgressTab />}
       </ScrollView>
     </View>
   );
