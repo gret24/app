@@ -217,8 +217,14 @@ export default function VideoLessonsScreen() {
         const res = await uploadAndAnalyze(input, filename, { fps: 4 });
         job_id = res.job_id; video_stem = res.video_stem;
       } else {
+        // YouTube URL → /analyze/url 엔드포인트
         const { apiPost } = await import('../../api/client');
-        const res = await apiPost<any>('/analyze', { video_path: input, fps: 4 });
+        const isYoutube = input.includes('youtube.com') || input.includes('youtu.be');
+        const endpoint = isYoutube ? '/analyze/url' : '/analyze';
+        const body = isYoutube
+          ? { youtube_url: input, fps: 4, home_roster: '', away_roster: '' }
+          : { video_path: input, fps: 4, home_roster: '', away_roster: '' };
+        const res = await apiPost<any>(endpoint, body);
         job_id = res.job_id; video_stem = res.video_stem;
       }
       setProgressMsg('AI 분석 중...'); animateProgress(20);
