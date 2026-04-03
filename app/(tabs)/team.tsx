@@ -200,12 +200,12 @@ export default function TeamScreen() {
           <View style={styles.recordRow}>
             <View style={styles.recordItem}>
               <Text style={[styles.recordVal, { color: '#34C759' }]}>{record.wins}</Text>
-              <Text style={styles.recordLabel}>Wins</Text>
+              <Text style={styles.recordLabel}>승</Text>
             </View>
             <View style={styles.recordDivider} />
             <View style={styles.recordItem}>
               <Text style={[styles.recordVal, { color: '#FF3B30' }]}>{record.losses}</Text>
-              <Text style={styles.recordLabel}>Losses</Text>
+              <Text style={styles.recordLabel}>패</Text>
             </View>
             <View style={styles.recordDivider} />
             <View style={styles.recordItem}>
@@ -217,7 +217,7 @@ export default function TeamScreen() {
 
         {/* Members */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Members ({team.coaches.length})</Text>
+          <Text style={styles.cardTitle}>👥 멤버 ({team.coaches.length})</Text>
           <View style={styles.memberList}>
             {team.coaches.map(coach => (
               <View key={coach.uid} style={styles.memberRow}>

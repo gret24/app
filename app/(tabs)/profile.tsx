@@ -55,7 +55,7 @@ function UpgradePlanModal({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <View style={m.backdrop}>
         <View style={m.sheet}>
-          <Text style={m.title}>Upgrade Plan</Text>
+          <Text style={m.title}>업그레이드</Text>
           {UPGRADE_PLANS.map(p => {
             const d = PLAN_DETAILS[p];
             const isCurrent = p === currentPlan;
@@ -126,9 +126,9 @@ export default function ProfileScreen() {
   };
 
   const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: signOut },
+    Alert.alert('로그아웃', '정말 로그아웃 하시겠어요?', [
+      { text: '취소', style: 'cancel' },
+      { text: '로그아웃', style: 'destructive', onPress: signOut },
     ]);
   };
 
@@ -137,7 +137,7 @@ export default function ProfileScreen() {
       <ScrollView style={p.root} contentContainerStyle={p.container} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={p.header}>
-          <Text style={p.headerTitle}>Profile</Text>
+          <Text style={p.headerTitle}>프로필</Text>
         </View>
 
         {/* Avatar + info */}
@@ -306,7 +306,7 @@ export default function ProfileScreen() {
 
         {/* Sign Out */}
         <Pressable style={p.signOutBtn} onPress={handleSignOut}>
-          <Text style={p.signOutText}>Sign Out</Text>
+          <Text style={p.signOutText}>로그아웃</Text>
         </Pressable>
 
         <View style={{ height: 40 }} />

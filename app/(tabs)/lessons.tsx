@@ -358,7 +358,7 @@ export default function VideoLessonsScreen() {
           style={[s.tab, mainTab === 'video' && s.tabActive]}
           onPress={() => setMainTab('video')}
         >
-          <Text style={[s.tabText, mainTab === 'video' && s.tabTextActive]}>📹 Video Lessons</Text>
+          <Text style={[s.tabText, mainTab === 'video' && s.tabTextActive]}>📹 영상 레슨</Text>
         </Pressable>
         <Pressable
           style={[s.tab, mainTab === 'tactics' && s.tabActive]}

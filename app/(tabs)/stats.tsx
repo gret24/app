@@ -60,7 +60,7 @@ export default function StatsScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>My Stats</Text>
+        <Text style={styles.headerTitle}>내 스탯</Text>
         {jerseyNumber && <Text style={styles.headerSub}>Jersey #{jerseyNumber}</Text>}
       </View>
 
@@ -84,7 +84,7 @@ export default function StatsScreen() {
 
         {/* Learning progress */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Learning Progress</Text>
+          <Text style={styles.cardTitle}>학습 진행률</Text>
           <View style={styles.progressHeader}>
             <Text style={styles.progressPct}>{learningProgress}%</Text>
             <Text style={styles.progressSub}>15-Week Curriculum</Text>

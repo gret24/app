@@ -166,8 +166,8 @@ const tz = StyleSheet.create({
 // ─────────────────────────────────────────────
 function OverviewTab() {
   const stats = [
-    { label: 'Ice Time', value: MOCK_OVERVIEW.iceTime,  icon: '⏱' },
-    { label: 'Shifts',   value: String(MOCK_OVERVIEW.shifts), icon: '🔄' },
+    { label: '아이스타임', value: MOCK_OVERVIEW.iceTime,  icon: '⏱' },
+    { label: '시프트',   value: String(MOCK_OVERVIEW.shifts), icon: '🔄' },
     { label: 'Avg Shift', value: MOCK_OVERVIEW.avgShiftLength, icon: '📏' },
     { label: 'Goals',    value: String(MOCK_OVERVIEW.goals),   icon: '🥅' },
     { label: 'Assists',  value: String(MOCK_OVERVIEW.assists),  icon: '🏒' },
@@ -420,19 +420,19 @@ function SpeedTab({ videoStem, playerNumber }: { videoStem: string; playerNumber
             <Text style={sp.summaryIcon}>⚡</Text>
             <Text style={sp.summaryVal}>{overall.avg_speed_kmh}</Text>
             <Text style={sp.summaryUnit}>km/h</Text>
-            <Text style={sp.summaryLabel}>Avg Speed</Text>
+            <Text style={sp.summaryLabel}>평균 속도</Text>
           </View>
           <View style={[sp.summaryCard, { borderTopColor: '#FF3B30' }]}>
             <Text style={sp.summaryIcon}>🚀</Text>
             <Text style={sp.summaryVal}>{overall.max_speed_kmh}</Text>
             <Text style={sp.summaryUnit}>km/h</Text>
-            <Text style={sp.summaryLabel}>Top Speed</Text>
+            <Text style={sp.summaryLabel}>최고 속도</Text>
           </View>
           <View style={[sp.summaryCard, { borderTopColor: '#34C759' }]}>
             <Text style={sp.summaryIcon}>📏</Text>
             <Text style={sp.summaryVal}>{overall.total_distance_km}</Text>
             <Text style={sp.summaryUnit}>km</Text>
-            <Text style={sp.summaryLabel}>Distance</Text>
+            <Text style={sp.summaryLabel}>총 이동거리</Text>
           </View>
         </View>
 
@@ -701,7 +701,7 @@ function ProgressTab() {
         {!hasData ? (
           <View style={pg.placeholder}>
             <Text style={pg.placeholderIcon}>📈</Text>
-            <Text style={pg.placeholderTitle}>Upload more games to see your progress</Text>
+            <Text style={pg.placeholderTitle}>더 많은 경기를 업로드하면 성장 추이를 볼 수 있어요</Text>
             <Text style={pg.placeholderSub}>At least 2 games are required to show trends.</Text>
           </View>
         ) : (
@@ -710,13 +710,13 @@ function ProgressTab() {
             <View style={pg.summaryRow}>
               <View style={[pg.summaryCard, { borderTopColor: '#34C759' }]}>
                 <Text style={pg.summaryCardIcon}>🏆</Text>
-                <Text style={pg.summaryCardLabel}>Best Performance</Text>
+                <Text style={pg.summaryCardLabel}>최고 경기</Text>
                 <Text style={pg.summaryCardVal}>{bestGame.date}</Text>
                 <Text style={pg.summaryCardSub}>{bestGame.avgSpeed} km/h avg</Text>
               </View>
               <View style={[pg.summaryCard, { borderTopColor: Colors.accent }]}>
                 <Text style={pg.summaryCardIcon}>📈</Text>
-                <Text style={pg.summaryCardLabel}>Most Improved</Text>
+                <Text style={pg.summaryCardLabel}>가장 향상된 항목</Text>
                 <Text style={pg.summaryCardVal}>Avg Speed</Text>
                 <Text style={[pg.summaryCardSub, { color: speedChange >= 0 ? '#34C759' : '#FF3B30' }]}>
                   {speedChange >= 0 ? '+' : ''}{speedChange}%
