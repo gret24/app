@@ -3,6 +3,7 @@ import {
   View, Text, ScrollView, Pressable, StyleSheet, Modal,
   ActivityIndicator, FlatList, Animated, Dimensions,
 } from 'react-native';
+import YoutubeIframe, { YoutubeIframeRef } from 'react-native-youtube-iframe';
 import { Colors } from '../../constants/Colors';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -17,6 +18,8 @@ import {
 import { TACTICS, type Tactic, type TacticCategory } from '../../tactics/data/tactics';
 import TacticsAnimator from '../../components/TacticsAnimator';
 import { getGames, type GameRecord } from '../../api/gamesService';
+import { getFrameDetections } from '../../api/trackingService';
+import { getNextMove, type NextMoveResponse } from '../../api/aiCoachService';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 
@@ -653,80 +656,196 @@ function AICoachTab() {
   );
 }
 
-// ─── AI Coach Player (mock) ───────────────────────────────────────────────────
+// ─── AI Coach Player ──────────────────────────────────────────────────────────
 function AICoachPlayer({ game, onBack }: { game: GameRecord; onBack: () => void }) {
   const [player, setPlayer] = useState(game.topPlayers?.[0] ?? '');
-  const [loading, setLoading] = useState(false);
+  const [videoPlaying, setVideoPlaying] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analysis, setAnalysis] = useState<NextMoveResponse | null>(null);
+  const [showOverlay, setShowOverlay] = useState(false);
+  const [fadeAnim] = useState(new Animated.Value(0));
+  const playerRef = useRef<YoutubeIframeRef>(null);
 
-  const MOCK_SUGGESTION = {
-    situation_analysis: 'Player positioned too deep in own zone during breakout, limiting passing options.',
-    primary_recommendation: {
-      action: 'Adjust positioning',
-      description: 'Move 3-5 feet higher up the boards before receiving the puck to create a better outlet lane.',
-      player_move: 'Skate from behind the net to the half-wall before the puck reaches the corner.',
-    },
-    alternative: 'If the lane is covered, use the reverse breakout to the opposite D.',
-    danger_zones: ['Own blue line gap', 'Center lane exposure on slow breakouts'],
-    related_tactic: 'basic_breakout',
-  };
+  const videoId = game.youtubeUrl
+    ? game.youtubeUrl.replace(/.*(?:youtu\.be\/|v=)([^&]+).*/, '$1')
+    : null;
+
+  const handleAIPress = useCallback(async () => {
+    if (analyzing) return;
+    setVideoPlaying(false);
+    setAnalyzing(true);
+    setAnalysis(null);
+    setShowOverlay(false);
+    try {
+      // Get current time → frame number (fps=4)
+      const currentTime = await playerRef.current?.getCurrentTime() ?? 0;
+      const frameNumber = Math.round(currentTime * 4);
+
+      // Fetch player positions at this frame
+      let detections: any[] = [];
+      let targetBbox: number[] = [0, 0, 0, 0];
+      try {
+        const frameData = await getFrameDetections(game.videoStem, frameNumber);
+        detections = frameData;
+        const target = frameData.find(d => String(d.jersey ?? '').replace(/^0+/, '') === player.replace(/^0+/, ''));
+        if (target) targetBbox = target.bbox;
+      } catch (_) {}
+
+      // POST to AI coach
+      const result = await getNextMove(
+        game.videoStem, player, frameNumber, detections, targetBbox, 'neutral', '5v5',
+      );
+      setAnalysis(result);
+      setShowOverlay(true);
+      fadeAnim.setValue(1);
+    } catch (_) {
+      // Fallback to mock
+      setAnalysis({
+        situation_analysis: 'Player positioned too deep in own zone during breakout, limiting passing options.',
+        primary_recommendation: {
+          action: 'Adjust positioning',
+          description: 'Move 3-5 feet higher up the boards before receiving the puck to create a better outlet lane.',
+          player_move: 'Skate from behind the net to the half-wall before the puck reaches the corner.',
+        },
+        alternative: 'If the lane is covered, use the reverse breakout to the opposite D.',
+        danger_zones: ['Own blue line gap', 'Center lane exposure on slow breakouts'],
+        related_tactic: 'basic_breakout',
+      });
+      setShowOverlay(true);
+      fadeAnim.setValue(1);
+    } finally {
+      setAnalyzing(false);
+    }
+  }, [analyzing, player, game.videoStem, game.youtubeUrl, fadeAnim]);
+
+  const handleContinue = useCallback(() => {
+    Animated.timing(fadeAnim, { toValue: 0, duration: 3000, useNativeDriver: true }).start(() => {
+      setShowOverlay(false);
+      setAnalysis(null);
+      setVideoPlaying(true);
+    });
+  }, [fadeAnim]);
 
   return (
-    <ScrollView style={styles.tabContent} contentContainerStyle={{ paddingBottom: 32 }}>
+    <View style={styles.tabContent}>
       <Pressable onPress={onBack} style={styles.backBtn}>
         <Text style={styles.backBtnText}>‹ Back to Games</Text>
       </Pressable>
 
       <Text style={styles.coachGameTitle}>{game.title}</Text>
 
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Player #</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}>
-          {(game.topPlayers ?? []).map(p => (
-            <Pressable
-              key={p}
-              style={[styles.filterChip, player === p && styles.filterChipActive]}
-              onPress={() => setPlayer(p)}
-            >
-              <Text style={[styles.filterChipText, player === p && styles.filterChipTextActive]}>#{p}</Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      </View>
-
-      <View style={styles.aiSuggestionCard}>
-        <Text style={styles.aiSuggestionTitle}>AI Situation Analysis</Text>
-        <Text style={styles.aiSuggestionText}>{MOCK_SUGGESTION.situation_analysis}</Text>
-
-        <View style={styles.divider} />
-
-        <Text style={styles.aiLabel}>PRIMARY RECOMMENDATION</Text>
-        <Text style={styles.aiActionText}>{MOCK_SUGGESTION.primary_recommendation.action}</Text>
-        <Text style={styles.aiSuggestionText}>{MOCK_SUGGESTION.primary_recommendation.description}</Text>
-        <Text style={[styles.aiSuggestionText, { color: Colors.accent, marginTop: 4 }]}>
-          → {MOCK_SUGGESTION.primary_recommendation.player_move}
-        </Text>
-
-        <View style={styles.divider} />
-
-        <Text style={styles.aiLabel}>ALTERNATIVE</Text>
-        <Text style={styles.aiSuggestionText}>{MOCK_SUGGESTION.alternative}</Text>
-
-        <View style={styles.divider} />
-
-        <Text style={styles.aiLabel}>DANGER ZONES</Text>
-        {MOCK_SUGGESTION.danger_zones.map(dz => (
-          <Text key={dz} style={[styles.aiSuggestionText, { color: '#FF3B30' }]}>⚠ {dz}</Text>
+      {/* Player selector */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16, marginBottom: 12 }}>
+        {(game.topPlayers ?? []).map(p => (
+          <Pressable
+            key={p}
+            style={[styles.filterChip, player === p && styles.filterChipActive]}
+            onPress={() => setPlayer(p)}
+          >
+            <Text style={[styles.filterChipText, player === p && styles.filterChipTextActive]}>#{p}</Text>
+          </Pressable>
         ))}
+      </ScrollView>
+
+      {/* Video player area */}
+      <View style={aiStyles.videoContainer}>
+        {videoId ? (
+          <YoutubeIframe
+            ref={playerRef}
+            height={SCREEN_W * 0.56}
+            width={SCREEN_W}
+            videoId={videoId}
+            play={videoPlaying}
+            onChangeState={(state: string) => {
+              if (state === 'playing') setVideoPlaying(true);
+              if (state === 'paused' || state === 'ended') setVideoPlaying(false);
+            }}
+          />
+        ) : (
+          <View style={aiStyles.noVideoPlaceholder}>
+            <Text style={aiStyles.noVideoIcon}>📹</Text>
+            <Text style={aiStyles.noVideoText}>No YouTube URL for this game</Text>
+          </View>
+        )}
+
+        {/* Gold AI button */}
+        <Pressable
+          style={[aiStyles.aiBtn, analyzing && { opacity: 0.6 }]}
+          onPress={handleAIPress}
+          disabled={analyzing}
+        >
+          {analyzing
+            ? <ActivityIndicator color="#000" size="small" />
+            : <Text style={aiStyles.aiBtnText}>🤖 AI</Text>
+          }
+        </Pressable>
       </View>
 
-      <View style={styles.notice}>
-        <Text style={styles.noticeText}>
-          Full AI coaching powered by Claude API — connect your RunPod server to activate real-time analysis.
-        </Text>
-      </View>
-    </ScrollView>
+      {/* Analysis overlay */}
+      {showOverlay && analysis && (
+        <Animated.View style={[aiStyles.analysisPanel, { opacity: fadeAnim }]}>
+          <ScrollView contentContainerStyle={{ gap: 10 }}>
+            <Text style={styles.aiSuggestionTitle}>AI Situation Analysis</Text>
+            <Text style={styles.aiSuggestionText}>{analysis.situation_analysis}</Text>
+
+            <View style={styles.divider} />
+            <Text style={styles.aiLabel}>PRIMARY RECOMMENDATION</Text>
+            <Text style={styles.aiActionText}>{analysis.primary_recommendation.action}</Text>
+            <Text style={styles.aiSuggestionText}>{analysis.primary_recommendation.description}</Text>
+            <Text style={[styles.aiSuggestionText, { color: Colors.accent, marginTop: 4 }]}>
+              → {analysis.primary_recommendation.player_move}
+            </Text>
+
+            <View style={styles.divider} />
+            <Text style={styles.aiLabel}>ALTERNATIVE</Text>
+            <Text style={styles.aiSuggestionText}>{analysis.alternative}</Text>
+
+            <View style={styles.divider} />
+            <Text style={styles.aiLabel}>DANGER ZONES</Text>
+            {analysis.danger_zones.map(dz => (
+              <Text key={dz} style={[styles.aiSuggestionText, { color: '#FF3B30' }]}>⚠ {dz}</Text>
+            ))}
+          </ScrollView>
+
+          <Pressable style={aiStyles.continueBtn} onPress={handleContinue}>
+            <Text style={aiStyles.continueBtnText}>Continue ▶</Text>
+          </Pressable>
+        </Animated.View>
+      )}
+    </View>
   );
 }
+
+const aiStyles = StyleSheet.create({
+  videoContainer: {
+    width: SCREEN_W, alignSelf: 'center',
+    backgroundColor: '#000', position: 'relative',
+  },
+  noVideoPlaceholder: {
+    height: SCREEN_W * 0.56, backgroundColor: Colors.input,
+    justifyContent: 'center', alignItems: 'center', gap: 8,
+  },
+  noVideoIcon: { fontSize: 40 },
+  noVideoText: { fontSize: 13, color: Colors.subtext },
+  aiBtn: {
+    position: 'absolute', bottom: 12, right: 12,
+    backgroundColor: '#FFD700', borderRadius: 24,
+    paddingHorizontal: 16, paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.4, shadowRadius: 4, elevation: 6,
+  },
+  aiBtnText: { fontSize: 14, fontWeight: '800', color: '#000' },
+  analysisPanel: {
+    backgroundColor: Colors.card, borderTopWidth: 1, borderTopColor: Colors.border,
+    padding: 16, maxHeight: 340, gap: 8,
+  },
+  continueBtn: {
+    marginTop: 8, height: 44, borderRadius: 10,
+    backgroundColor: Colors.accent, justifyContent: 'center', alignItems: 'center',
+  },
+  continueBtnText: { fontSize: 15, fontWeight: '700', color: Colors.bg },
+});
 
 // ─── Main Learn Screen ────────────────────────────────────────────────────────
 const LEARN_TABS: { key: LearnTab; label: string; icon: string }[] = [

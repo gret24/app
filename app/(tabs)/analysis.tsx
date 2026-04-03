@@ -5,8 +5,9 @@ import {
 } from 'react-native';
 
 import { getPlayers as apiGetPlayers, getReport as apiGetReport } from '../../api/analysisService';
+import { apiGet } from '../../api/client';
 import Svg, {
-  Rect, Line, Circle, G, RadialGradient, Defs, Stop, Ellipse, Text as SvgText,
+  Rect, Line, Circle, G, RadialGradient, Defs, Stop, Ellipse, Text as SvgText, Polyline,
 } from 'react-native-svg';
 import { Colors } from '../../constants/Colors';
 import { MOCK_PLAYERS, MOCK_ZONE_DATA, MOCK_OVERVIEW, Player } from '../../data/mockData';
@@ -336,6 +337,189 @@ const za = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────
+// Speed Tab
+// ─────────────────────────────────────────────
+interface SpeedOverall {
+  avg_speed_kmh: number;
+  max_speed_kmh: number;
+  total_distance_km: number;
+  total_ice_time_min: number;
+}
+interface SpeedPeriod {
+  period: number;
+  avg_speed_kmh: number;
+  max_speed_kmh: number;
+}
+interface SpeedPoint { time_sec: number; speed_kmh: number }
+
+function SpeedTab({ videoStem, playerNumber }: { videoStem: string; playerNumber: string }) {
+  const [loading, setLoading] = useState(true);
+  const [overall, setOverall] = useState<SpeedOverall | null>(null);
+  const [periods, setPeriods] = useState<SpeedPeriod[]>([]);
+  const [timeline, setTimeline] = useState<SpeedPoint[]>([]);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    setLoading(true); setError(false);
+    apiGet<any>(`/stats/${videoStem}/player/${playerNumber}/speed`)
+      .then(data => {
+        if (!data?.overall || Object.keys(data.overall).length === 0) {
+          setError(true);
+        } else {
+          setOverall(data.overall);
+          setPeriods(data.per_period ?? []);
+          setTimeline((data.speed_timeline ?? []).slice(0, 80));
+        }
+      })
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
+  }, [videoStem, playerNumber]);
+
+  if (loading) {
+    return (
+      <View style={sp.centered}>
+        <ActivityIndicator color={Colors.accent} />
+        <Text style={sp.loadingText}>Loading speed data...</Text>
+      </View>
+    );
+  }
+
+  if (error || !overall) {
+    return (
+      <View style={sp.centered}>
+        <Text style={sp.comingSoonIcon}>⚡</Text>
+        <Text style={sp.comingSoonTitle}>Speed Analysis</Text>
+        <Text style={sp.comingSoonSub}>No speed data available for this game &amp; player.</Text>
+      </View>
+    );
+  }
+
+  // Fitness analysis
+  const p1 = periods[0]?.avg_speed_kmh ?? 0;
+  const p3 = periods[2]?.avg_speed_kmh ?? 0;
+  const dropPct = p1 > 0 ? Math.round(((p1 - p3) / p1) * 100) : 0;
+  const fitnessText =
+    dropPct <= 5 ? 'Excellent fitness — speed consistent across all periods.' :
+    dropPct <= 15 ? `Moderate fatigue — ${dropPct}% speed drop in P3. Focus on conditioning.` :
+    `High fatigue — ${dropPct}% speed drop in P3. Consider interval training.`;
+
+  // Timeline chart
+  const chartW = SCREEN_W - 80;
+  const chartH = 80;
+  const maxSpd = Math.max(...timeline.map(p => p.speed_kmh), 1);
+  const points = timeline.map((p, i) =>
+    `${(i / (timeline.length - 1)) * chartW},${chartH - (p.speed_kmh / maxSpd) * chartH}`
+  ).join(' ');
+
+  return (
+    <ScrollView showsVerticalScrollIndicator={false}>
+      <View style={sp.container}>
+        {/* Summary cards */}
+        <View style={sp.summaryRow}>
+          <View style={[sp.summaryCard, { borderTopColor: Colors.accent }]}>
+            <Text style={sp.summaryIcon}>⚡</Text>
+            <Text style={sp.summaryVal}>{overall.avg_speed_kmh}</Text>
+            <Text style={sp.summaryUnit}>km/h</Text>
+            <Text style={sp.summaryLabel}>Avg Speed</Text>
+          </View>
+          <View style={[sp.summaryCard, { borderTopColor: '#FF3B30' }]}>
+            <Text style={sp.summaryIcon}>🚀</Text>
+            <Text style={sp.summaryVal}>{overall.max_speed_kmh}</Text>
+            <Text style={sp.summaryUnit}>km/h</Text>
+            <Text style={sp.summaryLabel}>Top Speed</Text>
+          </View>
+          <View style={[sp.summaryCard, { borderTopColor: '#34C759' }]}>
+            <Text style={sp.summaryIcon}>📏</Text>
+            <Text style={sp.summaryVal}>{overall.total_distance_km}</Text>
+            <Text style={sp.summaryUnit}>km</Text>
+            <Text style={sp.summaryLabel}>Distance</Text>
+          </View>
+        </View>
+
+        {/* Period comparison */}
+        {periods.length > 0 && (
+          <View style={sp.card}>
+            <Text style={sp.cardTitle}>Period Comparison</Text>
+            {periods.map(p => (
+              <View key={p.period} style={sp.periodRow}>
+                <Text style={sp.periodLabel}>P{p.period}</Text>
+                <View style={sp.periodBar}>
+                  <View style={[
+                    sp.periodBarFill,
+                    { width: `${Math.min((p.avg_speed_kmh / 35) * 100, 100)}%` },
+                  ]} />
+                </View>
+                <Text style={sp.periodVal}>{p.avg_speed_kmh} km/h</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
+        {/* Speed timeline */}
+        {timeline.length > 1 && (
+          <View style={sp.card}>
+            <Text style={sp.cardTitle}>Speed Timeline</Text>
+            <Svg width={chartW} height={chartH + 8} style={{ marginTop: 4 }}>
+              <Polyline
+                points={points}
+                fill="none"
+                stroke={Colors.accent}
+                strokeWidth="2"
+              />
+            </Svg>
+            <View style={sp.timelineLabels}>
+              <Text style={sp.timelineLabel}>0s</Text>
+              <Text style={sp.timelineLabel}>{Math.round(timeline[Math.floor(timeline.length / 2)]?.time_sec ?? 0)}s</Text>
+              <Text style={sp.timelineLabel}>{Math.round(timeline[timeline.length - 1]?.time_sec ?? 0)}s</Text>
+            </View>
+          </View>
+        )}
+
+        {/* Fitness analysis */}
+        <View style={[sp.card, { borderLeftWidth: 3, borderLeftColor: dropPct <= 5 ? '#34C759' : dropPct <= 15 ? '#FFD700' : '#FF3B30' }]}>
+          <Text style={sp.cardTitle}>Fitness Analysis</Text>
+          <Text style={sp.fitnessText}>{fitnessText}</Text>
+          <Text style={sp.iceTimeText}>Total ice time: {overall.total_ice_time_min} min</Text>
+        </View>
+      </View>
+    </ScrollView>
+  );
+}
+
+const sp = StyleSheet.create({
+  centered: { paddingVertical: 60, alignItems: 'center', gap: 10 },
+  loadingText: { fontSize: 13, color: Colors.subtext },
+  comingSoonIcon: { fontSize: 48 },
+  comingSoonTitle: { fontSize: 18, fontWeight: '700', color: Colors.text },
+  comingSoonSub: { fontSize: 13, color: Colors.subtext, textAlign: 'center' },
+  container: { gap: 16, paddingTop: 8 },
+  summaryRow: { flexDirection: 'row', gap: 10 },
+  summaryCard: {
+    flex: 1, backgroundColor: Colors.card, borderRadius: 14,
+    padding: 14, alignItems: 'center', gap: 2,
+    borderWidth: 1, borderColor: Colors.border, borderTopWidth: 3,
+  },
+  summaryIcon: { fontSize: 20 },
+  summaryVal: { fontSize: 22, fontWeight: '800', color: Colors.text },
+  summaryUnit: { fontSize: 10, color: Colors.subtext },
+  summaryLabel: { fontSize: 11, color: Colors.subtext, marginTop: 2 },
+  card: {
+    backgroundColor: Colors.card, borderRadius: 14,
+    padding: 16, borderWidth: 1, borderColor: Colors.border, gap: 10,
+  },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: Colors.text },
+  periodRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  periodLabel: { fontSize: 13, fontWeight: '700', color: Colors.subtext, width: 24 },
+  periodBar: { flex: 1, height: 8, borderRadius: 4, backgroundColor: Colors.input, overflow: 'hidden' },
+  periodBarFill: { height: '100%', borderRadius: 4, backgroundColor: Colors.accent },
+  periodVal: { fontSize: 12, color: Colors.text, fontWeight: '600', width: 72, textAlign: 'right' },
+  timelineLabels: { flexDirection: 'row', justifyContent: 'space-between' },
+  timelineLabel: { fontSize: 10, color: Colors.subtext },
+  fitnessText: { fontSize: 13, color: Colors.text, lineHeight: 20 },
+  iceTimeText: { fontSize: 12, color: Colors.subtext },
+});
+
+// ─────────────────────────────────────────────
 // Main AnalysisScreen
 // ─────────────────────────────────────────────
 const MOCK_VIDEOS = [
@@ -462,11 +646,7 @@ export default function AnalysisScreen() {
         {subTab === 'overview' && <OverviewTab />}
         {subTab === 'zone' && <ZoneAnalysisTab />}
         {subTab === 'speed' && (
-          <View style={as.comingSoon}>
-            <Text style={as.comingSoonIcon}>⚡</Text>
-            <Text style={as.comingSoonTitle}>Speed Analysis</Text>
-            <Text style={as.comingSoonSub}>Coming soon — GPS tracking & speed analytics</Text>
-          </View>
+          <SpeedTab videoStem={video_stem} playerNumber={String(selectedPlayer.number)} />
         )}
       </ScrollView>
     </View>

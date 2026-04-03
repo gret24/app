@@ -1,6 +1,7 @@
 import { Tabs } from 'expo-router';
 import { Text } from 'react-native';
 import { Colors } from '../../constants/Colors';
+import { useAuth } from '../../contexts/AuthContext';
 
 function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
   return (
@@ -9,6 +10,23 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 }
 
 export default function TabsLayout() {
+  const { userRole } = useAuth();
+
+  // Determine which tabs are hidden based on role
+  const isPlayer = userRole === 'player';
+  const isCoach  = userRole === 'coach';
+  const isTeam   = userRole === 'team';
+  const hasRole  = isPlayer || isCoach || isTeam;
+
+  // lessons: shown for all roles, hidden for default (no role)
+  const lessonsHidden = !hasRole;
+  // stats: shown only for player
+  const statsHidden = !isPlayer;
+  // analysis: shown for coach and default; hidden for player and team
+  const analysisHidden = isPlayer || isTeam;
+  // team tab: shown only for team role
+  const teamTabHidden = !isTeam;
+
   return (
     <Tabs
       screenOptions={{
@@ -39,6 +57,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="lessons"
         options={{
+          href: lessonsHidden ? null : undefined,
           title: '영상레슨',
           tabBarIcon: ({ focused }) => <TabIcon emoji="🎬" focused={focused} />,
         }}
@@ -53,8 +72,25 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="analysis"
         options={{
+          href: analysisHidden ? null : undefined,
           title: 'Analysis',
           tabBarIcon: ({ focused }) => <TabIcon emoji="📊" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="stats"
+        options={{
+          href: statsHidden ? null : undefined,
+          title: 'Stats',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="📊" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="team"
+        options={{
+          href: teamTabHidden ? null : undefined,
+          title: 'Team',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="🏟️" focused={focused} />,
         }}
       />
       <Tabs.Screen

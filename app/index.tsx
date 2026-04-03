@@ -7,14 +7,19 @@ import { Colors } from '../constants/Colors';
 
 export default function SplashScreen() {
   const router = useRouter();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, needsRoleSelect } = useAuth();
   const { lang, setLang } = useLang();
 
   useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      router.replace('/(tabs)');
+    if (isLoading) return;
+    if (isAuthenticated) {
+      if (needsRoleSelect) {
+        router.replace('/role-select');
+      } else {
+        router.replace('/(tabs)');
+      }
     }
-  }, [isLoading, isAuthenticated]);
+  }, [isLoading, isAuthenticated, needsRoleSelect]);
 
   return (
     <View style={styles.container}>

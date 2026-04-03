@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Platform } from 'react-native';
-import { createUserProfile } from '../api/userService';
+import { createUserProfile, getUserProfile, updateUserRole as apiUpdateUserRole, UserRole } from '../api/userService';
 import {
   auth,
   signInWithEmailAndPassword,
@@ -21,6 +21,9 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  userRole: UserRole | null;
+  needsRoleSelect: boolean;
+  setUserRoleLocal: (role: UserRole) => void;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string, name: string, team?: string, role?: string) => Promise<void>;
   signOut: () => Promise<void>;
@@ -32,6 +35,8 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [roleLoaded, setRoleLoaded] = useState(false);
 
   useEffect(() => {
     // Firebase Auth 상태 변화 감지
@@ -42,15 +47,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: firebaseUser.email,
           displayName: firebaseUser.displayName,
         });
-        // 로그인 시 Firestore lastLoginAt 업데이트
-        try { await createUserProfile(firebaseUser.uid, firebaseUser.email ?? '', firebaseUser.displayName ?? ''); } catch (_) {}
+        // 로그인 시 Firestore lastLoginAt 업데이트 + role 조회
+        try {
+          await createUserProfile(firebaseUser.uid, firebaseUser.email ?? '', firebaseUser.displayName ?? '');
+          const profile = await getUserProfile(firebaseUser.uid);
+          setUserRole(profile?.role ?? null);
+        } catch (_) {
+          setUserRole(null);
+        }
+        setRoleLoaded(true);
       } else {
         setUser(null);
+        setUserRole(null);
+        setRoleLoaded(true);
       }
       setIsLoading(false);
     });
     return unsubscribe;
   }, []);
+
+  const setUserRoleLocal = (role: UserRole) => {
+    setUserRole(role);
+  };
 
   const signIn = async (email: string, password: string) => {
     if (!email || !password) throw new Error('이메일과 비밀번호를 입력해주세요');
@@ -74,9 +92,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await sendPasswordResetEmail(auth, email);
   };
 
+  const needsRoleSelect = !!user && roleLoaded && userRole === null;
+
   return (
     <AuthContext.Provider value={{
       user, isAuthenticated: !!user, isLoading,
+      userRole, needsRoleSelect, setUserRoleLocal,
       signIn, signUp, signOut, sendPasswordReset,
     }}>
       {children}
