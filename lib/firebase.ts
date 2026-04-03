@@ -26,24 +26,49 @@ export const db = getFirestore(app);
 
 import {
   GoogleAuthProvider,
-  signInWithPopup,
   signInWithCredential,
 } from 'firebase/auth';
-import { Platform } from 'react-native';
+import * as AuthSession from 'expo-auth-session';
+import * as Crypto from 'expo-crypto';
 
 export const googleProvider = new GoogleAuthProvider();
 
 const WEB_CLIENT_ID = '99041784463-2l9jdn499hrvi0jsuqdictiqeqcr300d.apps.googleusercontent.com';
 
-// 앱 시작 시 1회 호출 (네이티브 Google 로그인 비활성화 - 웹 팝업만 사용)
 export const configureGoogleSignin = () => {
-  // Google Sign-in native module removed - using web popup only
+  // no-op: using expo-auth-session
 };
 
 export const signInWithGoogle = async () => {
-  // 웹 팝업 방식 (Android/iOS 모두 동일하게 처리)
-  const result = await signInWithPopup(auth, googleProvider);
-  return result.user;
+  const nonce = Crypto.randomUUID();
+  const hashedNonce = await Crypto.digestStringAsync(
+    Crypto.CryptoDigestAlgorithm.SHA256,
+    nonce
+  );
+
+  const redirectUri = AuthSession.makeRedirectUri();
+
+  const discovery = {
+    authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
+    tokenEndpoint: 'https://oauth2.googleapis.com/token',
+  };
+
+  const request = new AuthSession.AuthRequest({
+    clientId: WEB_CLIENT_ID,
+    redirectUri,
+    scopes: ['openid', 'profile', 'email'],
+    extraParams: { nonce: hashedNonce },
+  });
+
+  const result = await request.promptAsync(discovery);
+
+  if (result.type !== 'success' || !result.params.id_token) {
+    throw new Error('Google 로그인이 취소되었습니다.');
+  }
+
+  const credential = GoogleAuthProvider.credential(result.params.id_token);
+  const userCredential = await signInWithCredential(auth, credential);
+  return userCredential.user;
 };
 
 export {
