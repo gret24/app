@@ -12,7 +12,7 @@
       },
       "env": {
         "APP_ENV": "development",
-        "API_URL": "https://wet-cents-wilderness-drill.trycloudflare.com"
+        "API_URL": "https://iceiq-api.ngrok-free.app"
       },
       "node": "20.18.0"
     },
@@ -23,7 +23,7 @@
       },
       "env": {
         "APP_ENV": "preview",
-        "API_URL": "https://wet-cents-wilderness-drill.trycloudflare.com"
+        "API_URL": "https://iceiq-api.ngrok-free.app"
       },
       "node": "20.18.0"
     },
@@ -33,7 +33,7 @@
       },
       "env": {
         "APP_ENV": "production",
-        "API_URL": "https://api.iceiq.app"
+        "API_URL": "https://iceiq-api.ngrok-free.app"
       },
       "node": "20.18.0"
     }
