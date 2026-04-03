@@ -5,7 +5,7 @@ const APP_ENV = process.env.APP_ENV || 'preview';
 // RunPod 서버 URL (포트 8000 노출됨)
 export const API_BASE_URL = APP_ENV === 'production'
   ? 'https://iceiq-api.com'       // 프로덕션 (추후 변경)
-  : 'https://intromissible-reprovingly-santo.ngrok-free.dev';  // 개발/미리보기: RunPod 직접 접속
+  : 'https://wet-cents-wilderness-drill.trycloudflare.com';  // 개발/미리보기: RunPod Cloudflare Tunnel
 
 // API 키
 export const API_KEY = 'iceiq-dev-key-2026';
