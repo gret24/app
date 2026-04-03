@@ -14,6 +14,8 @@ export interface UserProfile {
   email: string;
   teamName?: string;
   role?: UserRole;         // player / coach / team
+  jerseyNumber?: number;
+  teamId?: string;
   plan: Plan;
   planStartDate?: Timestamp;
   planEndDate?: Timestamp | null;
@@ -152,6 +154,11 @@ export const canAccessFeature = (plan: Plan, feature: string): boolean => {
   const allowed = FEATURE_PLANS[feature];
   if (!allowed) return true; // 미정의 기능은 허용
   return allowed.includes(plan);
+};
+
+// 역할 업데이트
+export const updateUserRole = async (uid: string, role: UserRole): Promise<void> => {
+  await updateDoc(doc(db, 'users', uid), { role });
 };
 
 // 실시간 프로필 리스너
