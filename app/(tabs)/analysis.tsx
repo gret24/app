@@ -836,13 +836,13 @@ export default function AnalysisScreen() {
     <View style={as.root}>
       {/* Header */}
       <View style={as.header}>
-        <Text style={as.headerTitle}>Analysis</Text>
+        <Text style={as.headerTitle}>분석</Text>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={as.content}>
         {/* Video Selector */}
         <View style={as.section}>
-          <Text style={as.sectionLabel}>Select Video</Text>
+          <Text style={as.sectionLabel}>경기 선택</Text>
           <Pressable
             style={as.dropdown}
             onPress={() => setShowVideoDrop(v => !v)}
@@ -869,7 +869,7 @@ export default function AnalysisScreen() {
 
         {/* Player Selector */}
         <View style={as.section}>
-          <Text style={as.sectionLabel}>Select Player</Text>
+          <Text style={as.sectionLabel}>선수 선택</Text>
           {loadingPlayers ? (
             <ActivityIndicator size="small" color={Colors.accent} style={{ marginVertical: 12 }} />
           ) : (
@@ -906,7 +906,7 @@ export default function AnalysisScreen() {
               onPress={() => setSubTab(t)}
             >
               <Text style={[as.subTabText, subTab === t && as.subTabTextActive]}>
-                {t === 'overview' ? 'Overview' : t === 'zone' ? 'Zone' : t === 'speed' ? 'Speed' : 'Progress'}
+                {t === 'overview' ? '개요' : t === 'zone' ? '존 분석' : t === 'speed' ? '속도' : '성장 추이'}
               </Text>
             </Pressable>
           ))}

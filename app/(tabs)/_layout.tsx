@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { Text } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors } from '../../constants/Colors';
 import { useAuth } from '../../contexts/AuthContext';
 
@@ -11,6 +12,7 @@ function TabIcon({ emoji, focused }: { emoji: string; focused: boolean }) {
 
 export default function TabsLayout() {
   const { userRole } = useAuth();
+  const insets = useSafeAreaInsets();
 
   // Determine which tabs are hidden based on role
   const isPlayer = userRole === 'player';
@@ -35,8 +37,9 @@ export default function TabsLayout() {
           backgroundColor: Colors.card,
           borderTopColor: Colors.border,
           borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
+          height: 60 + insets.bottom,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 8,
+          paddingTop: 4,
         },
         tabBarActiveTintColor: Colors.accent,
         tabBarInactiveTintColor: Colors.subtext,
@@ -46,7 +49,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: '홈',
           tabBarIcon: ({ focused }) => <TabIcon emoji="🏠" focused={focused} />,
         }}
       />
@@ -58,14 +61,14 @@ export default function TabsLayout() {
         name="lessons"
         options={{
           href: lessonsHidden ? null : undefined,
-          title: '영상레슨',
+          title: '레슨',
           tabBarIcon: ({ focused }) => <TabIcon emoji="🎬" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="learn"
         options={{
-          title: 'Learn',
+          title: '학습',
           tabBarIcon: ({ focused }) => <TabIcon emoji="📚" focused={focused} />,
         }}
       />
@@ -73,7 +76,7 @@ export default function TabsLayout() {
         name="analysis"
         options={{
           href: analysisHidden ? null : undefined,
-          title: 'Analysis',
+          title: '분석',
           tabBarIcon: ({ focused }) => <TabIcon emoji="📊" focused={focused} />,
         }}
       />
@@ -81,7 +84,7 @@ export default function TabsLayout() {
         name="stats"
         options={{
           href: statsHidden ? null : undefined,
-          title: 'Stats',
+          title: '내 스탯',
           tabBarIcon: ({ focused }) => <TabIcon emoji="📊" focused={focused} />,
         }}
       />
@@ -89,14 +92,14 @@ export default function TabsLayout() {
         name="team"
         options={{
           href: teamTabHidden ? null : undefined,
-          title: 'Team',
+          title: '팀',
           tabBarIcon: ({ focused }) => <TabIcon emoji="🏟️" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
+          title: '프로필',
           tabBarIcon: ({ focused }) => <TabIcon emoji="👤" focused={focused} />,
         }}
       />

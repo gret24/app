@@ -36,14 +36,14 @@ export default function LoginScreen() {
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         {/* 헤더 */}
         <View style={styles.header}>
-          <Text style={styles.title}>Sign In</Text>
-          <Text style={styles.subtitle}>Welcome back to IceIQ</Text>
+          <Text style={styles.title}>다시 오셨군요</Text>
+          <Text style={styles.subtitle}>계속하려면 로그인하세요</Text>
         </View>
 
         {/* 폼 */}
         <View style={styles.form}>
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>이메일</Text>
             <TextInput
               style={styles.input}
               value={email}
@@ -57,7 +57,7 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>비밀번호</Text>
             <TextInput
               style={styles.input}
               value={password}
@@ -86,12 +86,12 @@ export default function LoginScreen() {
             onPress={handleLogin}
             disabled={loading}
           >
-            <Text style={styles.btnText}>{loading ? 'Signing in...' : 'Sign In'}</Text>
+            <Text style={styles.btnText}>{loading ? '로그인 중...' : '로그인'}</Text>
           </Pressable>
 
           <View style={styles.divider}>
             <View style={styles.divLine} />
-            <Text style={styles.divText}>or</Text>
+            <Text style={styles.divText}>또는</Text>
             <View style={styles.divLine} />
           </View>
 
@@ -106,15 +106,15 @@ export default function LoginScreen() {
               }
             }}
           >
-            <Text style={styles.googleText}>🔵  Continue with Google</Text>
+            <Text style={styles.googleText}>🔵  Google로 로그인</Text>
           </Pressable>
         </View>
 
         {/* 하단 링크 */}
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Don't have an account? </Text>
+          <Text style={styles.footerText}>계정이 없으신가요? </Text>
           <Pressable onPress={() => router.push('/(auth)/signup')}>
-            <Text style={styles.linkText}>Sign Up</Text>
+            <Text style={styles.linkText}>회원가입</Text>
           </Pressable>
         </View>
       </ScrollView>

@@ -18,39 +18,39 @@ const ROLE_CARDS: {
   {
     role: 'player',
     icon: '🏒',
-    title: 'Player',
-    description: 'Track your personal performance, ice time, and skill development.',
+    title: '선수',
+    description: '내 경기 영상 분석, 개인 하이라이트, 전술 학습',
     features: [
-      'Personal stats & ice time',
-      'Game IQ score tracking',
-      'Learning progress dashboard',
-      'Highlight reels & clips',
+      '내 하이라이트',
+      '학습 탭 전체',
+      '개인 스탯',
+      'AI 코치 (Pro)',
     ],
     color: '#00D4FF',
   },
   {
     role: 'coach',
     icon: '📋',
-    title: 'Coach',
-    description: 'Analyze your team, develop tactics, and generate player reports.',
+    title: '코치/지도자',
+    description: '팀 선수 분석, 전술 교육, 영상 드로잉, AI 리포트',
     features: [
-      'Full roster analysis',
-      'Zone & tactics board',
-      'AI-powered game reports',
-      'Player development tools',
+      '전체 선수 분석',
+      '드로잉+공유',
+      '레슨 관리',
+      'AI 리포트',
     ],
     color: '#34C759',
   },
   {
     role: 'team',
     icon: '🏟️',
-    title: 'Team',
-    description: 'Manage your organization, invite coaches, and share analyses.',
+    title: '팀/단체',
+    description: '팀 전체 관리, 시즌 통계, 상대팀 스카우팅, 다중 코치',
     features: [
-      'Team dashboard & feed',
-      'Invite & manage coaches',
-      'Shared analysis library',
-      'Season record summary',
+      '팀 대시보드',
+      '시즌 통계',
+      '스카우팅',
+      '코치 5명 접속',
     ],
     color: '#AF52DE',
   },
@@ -79,8 +79,8 @@ export default function RoleSelectScreen() {
   return (
     <View style={styles.root}>
       <View style={styles.header}>
-        <Text style={styles.title}>Choose Your Role</Text>
-        <Text style={styles.subtitle}>This helps us personalize your IceIQ experience.</Text>
+        <Text style={styles.title}>어떤 역할인가요?</Text>
+        <Text style={styles.subtitle}>역할을 선택해주세요</Text>
       </View>
 
       <ScrollView
@@ -139,7 +139,7 @@ export default function RoleSelectScreen() {
             <ActivityIndicator color="#fff" />
           ) : (
             <Text style={styles.confirmBtnText}>
-              {selected ? `Continue as ${ROLE_CARDS.find(r => r.role === selected)?.title}` : 'Select a Role'}
+              {selected ? '시작하기' : '역할을 선택해주세요'}
             </Text>
           )}
         </Pressable>

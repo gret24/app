@@ -69,7 +69,7 @@ function CurriculumTab() {
       {/* Overall progress */}
       <View style={styles.progressCard}>
         <View style={styles.progressHeader}>
-          <Text style={styles.progressTitle}>Overall Progress</Text>
+          <Text style={styles.progressTitle}>전체 진행률</Text>
           <Text style={styles.progressPct}>{overallPct}%</Text>
         </View>
         <View style={styles.progressBarBg}>
@@ -402,7 +402,7 @@ function QuizTab() {
         )}
 
         <Pressable style={styles.primaryBtn} onPress={() => setQuizState('config')}>
-          <Text style={styles.primaryBtnText}>Take Another Quiz</Text>
+          <Text style={styles.primaryBtnText}>다시 풀기</Text>
         </Pressable>
       </ScrollView>
     );
@@ -411,7 +411,7 @@ function QuizTab() {
   // Config screen
   return (
     <ScrollView style={styles.tabContent} contentContainerStyle={{ paddingBottom: 32 }}>
-      <Text style={styles.sectionTitle}>Category</Text>
+      <Text style={styles.sectionTitle}>카테고리</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }} contentContainerStyle={{ gap: 8, paddingHorizontal: 16 }}>
         {QUIZ_CAT_LABELS.map(({ key, label }) => (
           <Pressable
@@ -424,7 +424,7 @@ function QuizTab() {
         ))}
       </ScrollView>
 
-      <Text style={styles.sectionTitle}>Difficulty</Text>
+      <Text style={styles.sectionTitle}>난이도</Text>
       <View style={styles.selectorRow}>
         {(['all', 'beginner', 'intermediate', 'advanced'] as const).map(d => (
           <Pressable
@@ -433,13 +433,13 @@ function QuizTab() {
             onPress={() => setDifficulty(d)}
           >
             <Text style={[styles.selectorBtnText, difficulty === d && styles.selectorBtnTextActive]}>
-              {d === 'all' ? 'All' : d.charAt(0).toUpperCase() + d.slice(1)}
+              {d === 'all' ? '전체' : d === 'beginner' ? '초급' : d === 'intermediate' ? '중급' : '고급'}
             </Text>
           </Pressable>
         ))}
       </View>
 
-      <Text style={styles.sectionTitle}>Questions</Text>
+      <Text style={styles.sectionTitle}>문제 수</Text>
       <View style={styles.selectorRow}>
         {([5, 10, 20] as const).map(n => {
           const limitedN = isFree ? Math.min(n, FREE_DAILY_LIMIT - freeQUsed) : n;
@@ -471,7 +471,7 @@ function QuizTab() {
         onPress={startQuiz}
         disabled={isFree && freeQUsed >= FREE_DAILY_LIMIT}
       >
-        <Text style={styles.primaryBtnText}>Start Quiz</Text>
+        <Text style={styles.primaryBtnText}>퀴즈 시작</Text>
       </Pressable>
     </ScrollView>
   );
@@ -549,7 +549,7 @@ function QuizPlayer({ question, questionIndex, totalQuestions, selectedAnswer, s
       {showFeedback && (
         <View style={[styles.feedbackBox, { borderColor: isCorrect ? '#00CC66' : '#FF3B30' }]}>
           <Text style={[styles.feedbackTitle, { color: isCorrect ? '#00CC66' : '#FF3B30' }]}>
-            {isCorrect ? '✓ Correct!' : '✗ Incorrect'}
+            {isCorrect ? '✓ 정답!' : '✗ 오답'}
           </Text>
           <Text style={styles.feedbackExplanation}>{question.explanation}</Text>
         </View>
@@ -558,7 +558,7 @@ function QuizPlayer({ question, questionIndex, totalQuestions, selectedAnswer, s
       {showFeedback && (
         <Pressable style={styles.primaryBtn} onPress={onNext}>
           <Text style={styles.primaryBtnText}>
-            {questionIndex + 1 >= totalQuestions ? 'See Results' : 'Next Question'}
+            {questionIndex + 1 >= totalQuestions ? '결과 보기' : '다음'}
           </Text>
         </Pressable>
       )}
@@ -590,7 +590,7 @@ function AICoachTab() {
     return (
       <View style={styles.lockScreen}>
         <Text style={styles.lockIcon}>🔒</Text>
-        <Text style={styles.lockTitle}>Pro Feature</Text>
+        <Text style={styles.lockTitle}>Pro 전용</Text>
         <Text style={styles.lockSub}>
           AI Coach analyzes your game footage and provides personalized tactical recommendations.{'\n\n'}
           Upgrade to Pro to unlock.
@@ -613,14 +613,14 @@ function AICoachTab() {
 
   return (
     <View style={styles.tabContent}>
-      <Text style={styles.sectionTitle}>Select a Game</Text>
+      <Text style={styles.sectionTitle}>경기 선택</Text>
       {loading ? (
         <ActivityIndicator color={Colors.accent} style={{ marginTop: 32 }} />
       ) : games.length === 0 ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyIcon}>📹</Text>
-          <Text style={styles.emptyText}>No games analyzed yet</Text>
-          <Text style={styles.emptySub}>Upload and analyze a game in the Analysis tab first</Text>
+          <Text style={styles.emptyText}>아직 분석된 경기가 없어요</Text>
+          <Text style={styles.emptySub}>분석 탭에서 경기를 먼저 업로드하세요</Text>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
@@ -849,10 +849,10 @@ const aiStyles = StyleSheet.create({
 
 // ─── Main Learn Screen ────────────────────────────────────────────────────────
 const LEARN_TABS: { key: LearnTab; label: string; icon: string }[] = [
-  { key: 'curriculum', label: 'Curriculum', icon: '📚' },
-  { key: 'tactics',    label: 'Tactics',    icon: '🧠' },
-  { key: 'quiz',       label: 'Quiz',       icon: '❓' },
-  { key: 'ai_coach',   label: 'AI Coach',   icon: '🤖' },
+  { key: 'curriculum', label: '커리큘럼', icon: '📚' },
+  { key: 'tactics',    label: '전술',    icon: '🧠' },
+  { key: 'quiz',       label: '퀴즈',       icon: '❓' },
+  { key: 'ai_coach',   label: 'AI 코치',   icon: '🤖' },
 ];
 
 export default function LearnScreen() {
@@ -862,7 +862,7 @@ export default function LearnScreen() {
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Learn</Text>
+        <Text style={styles.headerTitle}>학습</Text>
         <Text style={styles.headerSub}>Hockey IQ Training</Text>
       </View>
 

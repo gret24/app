@@ -34,24 +34,24 @@ export default function ForgotPasswordScreen() {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.icon}>🔑</Text>
-          <Text style={styles.title}>Reset Password</Text>
+          <Text style={styles.title}>비밀번호 재설정</Text>
           <Text style={styles.subtitle}>
-            Enter your email and we'll send you a reset link
+            이메일을 입력하세요
           </Text>
         </View>
 
         {sent ? (
           <View style={styles.successCard}>
             <Text style={styles.successIcon}>✅</Text>
-            <Text style={styles.successTitle}>Email Sent!</Text>
+            <Text style={styles.successTitle}>이메일 전송 완료!</Text>
             <Text style={styles.successText}>
-              Check your inbox for the password reset link.
+              받은 편지함에서 비밀번호 재설정 링크를 확인하세요.
             </Text>
           </View>
         ) : (
           <View style={styles.form}>
             <View style={styles.fieldGroup}>
-              <Text style={styles.label}>Email</Text>
+              <Text style={styles.label}>이메일</Text>
               <TextInput
                 style={styles.input}
                 value={email}
@@ -70,14 +70,14 @@ export default function ForgotPasswordScreen() {
               disabled={loading}
             >
               <Text style={styles.btnText}>
-                {loading ? 'Sending...' : 'Send Reset Email'}
+                {loading ? '전송 중...' : '재설정 메일 보내기'}
               </Text>
             </Pressable>
           </View>
         )}
 
         <Pressable style={styles.backBtn} onPress={() => router.back()}>
-          <Text style={styles.backText}>← Back to Sign In</Text>
+          <Text style={styles.backText}>← 로그인으로 돌아가기</Text>
         </Pressable>
       </View>
     </KeyboardAvoidingView>

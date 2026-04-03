@@ -56,17 +56,17 @@ export default function SignUpScreen() {
     >
       <ScrollView contentContainerStyle={styles.container} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <Text style={styles.title}>Create Account</Text>
-          <Text style={styles.subtitle}>Join IceIQ and analyze your game</Text>
+          <Text style={styles.title}>회원가입</Text>
+          <Text style={styles.subtitle}>IceIQ를 시작하세요</Text>
         </View>
 
         <View style={styles.form}>
           {[
-            { label: 'Name', value: name, set: setName, placeholder: 'John Doe', type: 'default' },
-            { label: 'Email', value: email, set: setEmail, placeholder: 'you@example.com', type: 'email-address' },
-            { label: 'Password', value: password, set: setPassword, placeholder: '••••••••', secure: true },
-            { label: 'Confirm Password', value: confirm, set: setConfirm, placeholder: '••••••••', secure: true },
-            { label: 'Team Name (optional)', value: team, set: setTeam, placeholder: 'e.g. Ice Hawks', type: 'default' },
+            { label: '이름', value: name, set: setName, placeholder: '홍길동', type: 'default' },
+            { label: '이메일', value: email, set: setEmail, placeholder: 'you@example.com', type: 'email-address' },
+            { label: '비밀번호', value: password, set: setPassword, placeholder: '••••••••', secure: true },
+            { label: '비밀번호 확인', value: confirm, set: setConfirm, placeholder: '••••••••', secure: true },
+            { label: '팀 이름 (선택)', value: team, set: setTeam, placeholder: '예: Ice Hawks', type: 'default' },
           ].map((field) => (
             <View key={field.label} style={styles.fieldGroup}>
               <Text style={styles.label}>{field.label}</Text>
@@ -150,14 +150,14 @@ export default function SignUpScreen() {
             onPress={handleSignUp}
             disabled={loading}
           >
-            <Text style={styles.btnText}>{loading ? 'Creating account...' : 'Sign Up'}</Text>
+            <Text style={styles.btnText}>{loading ? '계정 만드는 중...' : '계정 만들기'}</Text>
           </Pressable>
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.footerText}>Already have an account? </Text>
+          <Text style={styles.footerText}>이미 계정이 있으신가요? </Text>
           <Pressable onPress={() => router.back()}>
-            <Text style={styles.linkText}>Sign In</Text>
+            <Text style={styles.linkText}>로그인</Text>
           </Pressable>
         </View>
       </ScrollView>

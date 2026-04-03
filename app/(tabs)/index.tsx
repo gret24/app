@@ -29,30 +29,30 @@ function PlayerHome({ firstName }: { firstName: string }) {
       </View>
 
       {/* Quick actions */}
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
+      <Text style={styles.sectionTitle}>빠른 메뉴</Text>
       <View style={styles.quickActions}>
         <Pressable style={styles.quickBtn} onPress={() => router.push('/(tabs)/stats')}>
           <Text style={styles.quickIcon}>📊</Text>
-          <Text style={styles.quickLabel}>My Stats</Text>
+          <Text style={styles.quickLabel}>내 스탯</Text>
         </Pressable>
         <Pressable style={styles.quickBtn} onPress={() => router.push('/(tabs)/learn')}>
           <Text style={styles.quickIcon}>📚</Text>
-          <Text style={styles.quickLabel}>Continue Learning</Text>
+          <Text style={styles.quickLabel}>학습 계속하기</Text>
         </Pressable>
         <Pressable style={styles.quickBtn} onPress={() => router.push('/(tabs)/lessons')}>
           <Text style={styles.quickIcon}>🎬</Text>
-          <Text style={styles.quickLabel}>Video Lessons</Text>
+          <Text style={styles.quickLabel}>영상 레슨</Text>
         </Pressable>
         <Pressable style={styles.quickBtn} onPress={() => router.push('/(player)')}>
           <Text style={styles.quickIcon}>🎯</Text>
-          <Text style={styles.quickLabel}>Analysis</Text>
+          <Text style={styles.quickLabel}>분석</Text>
         </Pressable>
       </View>
 
       {/* Recent highlight */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Recent Highlight</Text>
-        <Text style={styles.cardDesc}>Upload a game to see your highlight reel</Text>
+        <Text style={styles.cardTitle}>최근 하이라이트</Text>
+        <Text style={styles.cardDesc}>경기 영상을 업로드하면 하이라이트를 볼 수 있어요</Text>
         <Pressable style={[styles.actionBtn, { backgroundColor: '#00D4FF22', borderColor: '#00D4FF55' }]}
           onPress={() => router.push('/(player)')}>
           <Text style={[styles.actionBtnText, { color: '#00D4FF' }]}>Analyze a Game →</Text>
@@ -69,21 +69,21 @@ function CoachHome({ firstName }: { firstName: string }) {
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.welcomeRow}>
         <View>
-          <Text style={styles.welcome}>Coach {firstName} 📋</Text>
-          <Text style={styles.subtitle}>Manage your team &amp; build winning tactics</Text>
+          <Text style={styles.welcome}>코치 {firstName} 📋</Text>
+          <Text style={styles.subtitle}>팀을 관리하고 전술을 세워보세요</Text>
         </View>
       </View>
 
       {/* AI recommendations */}
       <View style={[styles.card, { borderColor: '#34C75955' }]}>
-        <Text style={styles.cardLabel}>AI RECOMMENDATIONS</Text>
-        <Text style={styles.cardTitle}>Improve your neutral zone transition</Text>
+        <Text style={styles.cardLabel}>AI 추천</Text>
+        <Text style={styles.cardTitle}>뉴트럴존 전환을 개선하세요</Text>
         <Text style={styles.cardDesc}>
-          Based on last 3 games: 68% of zone entries were rushed. Review Neutral Zone Trap tactics.
+          최근 3경기 분석: 68%의 존 진입이 급했습니다. 뉴트럴존 트랩 전술을 복습하세요.
         </Text>
         <Pressable style={[styles.actionBtn, { backgroundColor: '#34C75922', borderColor: '#34C75955' }]}
           onPress={() => router.push('/(tabs)/learn')}>
-          <Text style={[styles.actionBtnText, { color: '#34C759' }]}>View Tactics →</Text>
+          <Text style={[styles.actionBtnText, { color: '#34C759' }]}>전술 보기 →</Text>
         </Pressable>
       </View>
 
@@ -92,37 +92,37 @@ function CoachHome({ firstName }: { firstName: string }) {
         onPress={() => router.push('/(tabs)/analysis')}>
         <Text style={styles.uploadBtnIcon}>📹</Text>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.uploadBtnTitle, { color: '#34C759' }]}>Upload Game Video</Text>
+          <Text style={[styles.uploadBtnTitle, { color: '#34C759' }]}>경기 영상 업로드</Text>
           <Text style={styles.uploadBtnSub}>YouTube URL 또는 갤러리에서 영상 선택</Text>
         </View>
         <Text style={{ color: '#34C759', fontSize: 18 }}>→</Text>
       </Pressable>
 
       {/* Quick actions */}
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
+      <Text style={styles.sectionTitle}>빠른 메뉴</Text>
       <View style={styles.quickActions}>
         <Pressable style={styles.quickBtn} onPress={() => router.push('/(team)')}>
           <Text style={styles.quickIcon}>🏟️</Text>
-          <Text style={styles.quickLabel}>Team Analysis</Text>
+          <Text style={styles.quickLabel}>팀 분석</Text>
         </Pressable>
         <Pressable style={styles.quickBtn} onPress={() => router.push('/(player)')}>
           <Text style={styles.quickIcon}>🏒</Text>
-          <Text style={styles.quickLabel}>Player Stats</Text>
+          <Text style={styles.quickLabel}>선수 스탯</Text>
         </Pressable>
         <Pressable style={styles.quickBtn} onPress={() => router.push('/(tabs)/learn')}>
           <Text style={styles.quickIcon}>🧠</Text>
-          <Text style={styles.quickLabel}>Tactics Board</Text>
+          <Text style={styles.quickLabel}>전술 보드</Text>
         </Pressable>
         <Pressable style={styles.quickBtn} onPress={() => router.push('/(tabs)/analysis')}>
           <Text style={styles.quickIcon}>📊</Text>
-          <Text style={styles.quickLabel}>Game Analysis</Text>
+          <Text style={styles.quickLabel}>경기 분석</Text>
         </Pressable>
       </View>
 
       {/* Player summary */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Player Summary</Text>
-        <Text style={styles.cardDesc}>Top performers this week</Text>
+        <Text style={styles.cardTitle}>선수 요약</Text>
+        <Text style={styles.cardDesc}>이번 주 활약 선수</Text>
         {['#13 — 22 min ice time', '#21 — 3 zone entries', '#7 — Top speed 32 km/h'].map(p => (
           <View key={p} style={styles.playerSummaryRow}>
             <Text style={styles.playerSummaryDot}>•</Text>
@@ -141,14 +141,14 @@ function TeamHome({ firstName }: { firstName: string }) {
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.welcomeRow}>
         <View>
-          <Text style={styles.welcome}>Team Dashboard 🏟️</Text>
-          <Text style={styles.subtitle}>Season overview &amp; team activity</Text>
+          <Text style={styles.welcome}>팀 대시보드 🏟️</Text>
+          <Text style={styles.subtitle}>시즌 개요 및 팀 활동</Text>
         </View>
       </View>
 
       {/* Season stats */}
       <View style={[styles.card, { borderColor: '#AF52DE55' }]}>
-        <Text style={styles.cardLabel}>SEASON RECORD</Text>
+        <Text style={styles.cardLabel}>시즌 전적</Text>
         <View style={styles.seasonRow}>
           <View style={styles.seasonStat}>
             <Text style={[styles.seasonVal, { color: '#34C759' }]}>8</Text>
@@ -170,40 +170,40 @@ function TeamHome({ firstName }: { firstName: string }) {
         onPress={() => router.push('/(tabs)/analysis')}>
         <Text style={styles.uploadBtnIcon}>📹</Text>
         <View style={{ flex: 1 }}>
-          <Text style={[styles.uploadBtnTitle, { color: '#AF52DE' }]}>Upload Game Video</Text>
+          <Text style={[styles.uploadBtnTitle, { color: '#AF52DE' }]}>경기 영상 업로드</Text>
           <Text style={styles.uploadBtnSub}>YouTube URL 또는 갤러리에서 영상 선택</Text>
         </View>
         <Text style={{ color: '#AF52DE', fontSize: 18 }}>→</Text>
       </Pressable>
 
       {/* Quick actions */}
-      <Text style={styles.sectionTitle}>Quick Actions</Text>
+      <Text style={styles.sectionTitle}>빠른 메뉴</Text>
       <View style={styles.quickActions}>
         <Pressable style={styles.quickBtn} onPress={() => router.push('/(tabs)/team')}>
           <Text style={styles.quickIcon}>👥</Text>
-          <Text style={styles.quickLabel}>Manage Team</Text>
+          <Text style={styles.quickLabel}>팀 관리</Text>
         </Pressable>
         <Pressable style={styles.quickBtn} onPress={() => router.push('/(team)')}>
           <Text style={styles.quickIcon}>📊</Text>
-          <Text style={styles.quickLabel}>Team Analysis</Text>
+          <Text style={styles.quickLabel}>팀 분석</Text>
         </Pressable>
         <Pressable style={styles.quickBtn} onPress={() => router.push('/(tabs)/learn')}>
           <Text style={styles.quickIcon}>🧠</Text>
-          <Text style={styles.quickLabel}>Tactics</Text>
+          <Text style={styles.quickLabel}>전술</Text>
         </Pressable>
         <Pressable style={styles.quickBtn} onPress={() => router.push('/(tabs)/profile')}>
           <Text style={styles.quickIcon}>⚙️</Text>
-          <Text style={styles.quickLabel}>Settings</Text>
+          <Text style={styles.quickLabel}>설정</Text>
         </Pressable>
       </View>
 
       {/* Activity */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>Recent Activity</Text>
-        <Text style={styles.cardDesc}>Share analyses and drawings with your team.</Text>
+        <Text style={styles.cardTitle}>최근 활동</Text>
+        <Text style={styles.cardDesc}>분석 및 드로잉을 팀과 공유하세요.</Text>
         <Pressable style={[styles.actionBtn, { backgroundColor: '#AF52DE22', borderColor: '#AF52DE55' }]}
           onPress={() => router.push('/(tabs)/team')}>
-          <Text style={[styles.actionBtnText, { color: '#AF52DE' }]}>View Team Feed →</Text>
+          <Text style={[styles.actionBtnText, { color: '#AF52DE' }]}>팀 피드 보기 →</Text>
         </Pressable>
       </View>
     </ScrollView>
@@ -216,7 +216,7 @@ function DefaultHome({ firstName }: { firstName: string }) {
   return (
     <View style={styles.defaultContent}>
       <View style={styles.header}>
-        <Text style={styles.welcome}>Welcome, {firstName}</Text>
+        <Text style={styles.welcome}>환영합니다, {firstName}</Text>
         <Text style={styles.subtitle}>Select an analysis mode to get started</Text>
       </View>
 
