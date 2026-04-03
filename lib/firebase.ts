@@ -35,30 +35,15 @@ export const googleProvider = new GoogleAuthProvider();
 
 const WEB_CLIENT_ID = '99041784463-2l9jdn499hrvi0jsuqdictiqeqcr300d.apps.googleusercontent.com';
 
-// 앱 시작 시 1회 호출
+// 앱 시작 시 1회 호출 (네이티브 Google 로그인 비활성화 - 웹 팝업만 사용)
 export const configureGoogleSignin = () => {
-  if (Platform.OS !== 'web') {
-    try {
-      const { GoogleSignin } = require('@react-native-google-signin/google-signin');
-      GoogleSignin.configure({ webClientId: WEB_CLIENT_ID });
-    } catch (_) {}
-  }
+  // Google Sign-in native module removed - using web popup only
 };
 
 export const signInWithGoogle = async () => {
-  if (Platform.OS === 'web') {
-    // 웹: 팝업 방식
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
-  } else {
-    // 네이티브 앱: GoogleSignin 방식
-    const { GoogleSignin } = require('@react-native-google-signin/google-signin');
-    await GoogleSignin.hasPlayServices();
-    const { idToken } = await GoogleSignin.signIn();
-    const credential = GoogleAuthProvider.credential(idToken);
-    const result = await signInWithCredential(auth, credential);
-    return result.user;
-  }
+  // 웹 팝업 방식 (Android/iOS 모두 동일하게 처리)
+  const result = await signInWithPopup(auth, googleProvider);
+  return result.user;
 };
 
 export {
