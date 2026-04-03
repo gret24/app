@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../../contexts/AuthContext';
 import { useSubscription, Plan, PLAN_DETAILS } from '../../contexts/SubscriptionContext';
+import { useLang } from '../../contexts/LanguageContext';
 import { Colors } from '../../constants/Colors';
 import { openCheckout, openCustomerPortal } from '../../api/paymentService';
 
@@ -96,6 +97,7 @@ export default function ProfileScreen() {
   const { plan, upgrade, profile } = useSubscription();
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [portalLoading, setPortalLoading] = useState(false);
+  const { lang, setLang } = useLang();
 
   const handleManageSubscription = async () => {
     if (!user?.uid) return;
@@ -253,6 +255,25 @@ export default function ProfileScreen() {
           </Pressable>
         )}
 
+        {/* 언어 설정 */}
+        <View style={[p.card, { marginBottom: 12 }]}>
+          <Text style={p.cardLabel}>🌐 언어 / Language</Text>
+          <View style={p.langRow}>
+            <Pressable
+              style={[p.langBtn, lang === 'ko' && p.langBtnActive]}
+              onPress={() => setLang('ko')}
+            >
+              <Text style={[p.langText, lang === 'ko' && p.langTextActive]}>🇰🇷 한국어</Text>
+            </Pressable>
+            <Pressable
+              style={[p.langBtn, lang === 'en' && p.langBtnActive]}
+              onPress={() => setLang('en')}
+            >
+              <Text style={[p.langText, lang === 'en' && p.langTextActive]}>🇺🇸 English</Text>
+            </Pressable>
+          </View>
+        </View>
+
         {/* 역할 변경 */}
         <Pressable
           style={[p.signOutBtn, { borderColor: '#00D4FF55', backgroundColor: '#00D4FF11', marginBottom: 8 }]}
@@ -373,6 +394,8 @@ const p = StyleSheet.create({
 
   settingsCard: { backgroundColor: Colors.card, borderRadius: 14, padding: 16, borderWidth: 1, borderColor: Colors.border, marginBottom: 0 },
   settingsLabel: { fontSize: 13, fontWeight: '700', color: Colors.subtext, marginBottom: 12 },
+  card: { backgroundColor: '#1A1A2E', borderRadius: 14, padding: 16, borderWidth: 1, borderColor: '#2A2A3E' },
+  cardLabel: { fontSize: 13, fontWeight: '700', color: Colors.subtext, marginBottom: 12 },
   langRow: { flexDirection: 'row', gap: 10 },
   langBtn: { flex: 1, height: 40, borderRadius: 10, borderWidth: 1, borderColor: Colors.border, justifyContent: 'center', alignItems: 'center' },
   langBtnActive: { borderColor: Colors.accent, backgroundColor: Colors.accent + '22' },
