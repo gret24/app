@@ -29,15 +29,20 @@ import {
   signInWithCredential,
 } from 'firebase/auth';
 import * as AuthSession from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
 import * as Crypto from 'expo-crypto';
+
+WebBrowser.maybeCompleteAuthSession();
 
 export const googleProvider = new GoogleAuthProvider();
 
 const WEB_CLIENT_ID = '99041784463-2l9jdn499hrvi0jsuqdictiqeqcr300d.apps.googleusercontent.com';
 
 export const configureGoogleSignin = () => {
-  // no-op: using expo-auth-session
+  // no-op
 };
+
+
 
 export const signInWithGoogle = async () => {
   const nonce = Crypto.randomUUID();
@@ -46,27 +51,32 @@ export const signInWithGoogle = async () => {
     nonce
   );
 
-  const redirectUri = AuthSession.makeRedirectUri();
+  // Expo hosted auth proxy (https 필요 - Google OAuth 호환)
+  const redirectUri = 'https://auth.expo.io/@gret24/iceiq';
 
-  const discovery = {
-    authorizationEndpoint: 'https://accounts.google.com/o/oauth2/v2/auth',
-    tokenEndpoint: 'https://oauth2.googleapis.com/token',
-  };
+  const authUrl =
+    `https://accounts.google.com/o/oauth2/v2/auth?` +
+    `client_id=${WEB_CLIENT_ID}` +
+    `&redirect_uri=${encodeURIComponent(redirectUri)}` +
+    `&response_type=id_token` +
+    `&scope=openid%20profile%20email` +
+    `&nonce=${hashedNonce}`;
 
-  const request = new AuthSession.AuthRequest({
-    clientId: WEB_CLIENT_ID,
-    redirectUri,
-    scopes: ['openid', 'profile', 'email'],
-    extraParams: { nonce: hashedNonce },
-  });
+  const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
 
-  const result = await request.promptAsync(discovery);
-
-  if (result.type !== 'success' || !result.params.id_token) {
+  if (result.type !== 'success') {
     throw new Error('Google 로그인이 취소되었습니다.');
   }
 
-  const credential = GoogleAuthProvider.credential(result.params.id_token);
+  // URL에서 id_token 추출
+  const params = new URLSearchParams(result.url.split('#')[1] || result.url.split('?')[1] || '');
+  const idToken = params.get('id_token');
+
+  if (!idToken) {
+    throw new Error('Google 인증 토큰을 받지 못했습니다.');
+  }
+
+  const credential = GoogleAuthProvider.credential(idToken);
   const userCredential = await signInWithCredential(auth, credential);
   return userCredential.user;
 };

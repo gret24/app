@@ -95,8 +95,7 @@ export default function LoginScreen() {
             <View style={styles.divLine} />
           </View>
 
-          {/* Google 로그인 - Firebase Console 설정 후 활성화 예정 */}
-          {/* <Pressable
+          <Pressable
             style={({ pressed }) => [styles.googleBtn, pressed && { opacity: 0.8 }]}
             onPress={async () => {
               try {
@@ -108,7 +107,7 @@ export default function LoginScreen() {
             }}
           >
             <Text style={styles.googleText}>🔵  Continue with Google</Text>
-          </Pressable> */}
+          </Pressable>
         </View>
 
         {/* 하단 링크 */}
