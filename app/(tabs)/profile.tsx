@@ -90,7 +90,7 @@ function UpgradePlanModal({
 }
 
 export default function ProfileScreen() {
-  const { user, signOut } = useAuth();
+  const { user, signOut, setUserRoleLocal } = useAuth();
   const router = useRouter();
   const isAdmin = user?.email && ADMIN_EMAILS.includes(user.email);
   const { plan, upgrade, profile } = useSubscription();
@@ -271,10 +271,9 @@ export default function ProfileScreen() {
                       if (user) {
                         await updateDoc(doc(db, 'users', user.uid), { role: null });
                       }
-                      router.replace('/role-select');
-                    } catch (e) {
-                      router.replace('/role-select');
-                    }
+                      setUserRoleLocal(null as any);
+                    } catch (e) {}
+                    router.replace('/role-select');
                   },
                 },
               ]
