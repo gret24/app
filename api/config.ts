@@ -1,10 +1,11 @@
 // IceIQ API 설정
-const __DEV__ = process.env.NODE_ENV !== 'production';
+// APP_ENV는 eas.json의 env에서 주입됨 (preview/development = RunPod, production = 프로덕션)
+const APP_ENV = process.env.APP_ENV || 'preview';
 
 // RunPod 서버 URL (포트 8000 노출됨)
-export const API_BASE_URL = __DEV__
-  ? 'https://intromissible-reprovingly-santo.ngrok-free.dev'   // 개발: RunPod 직접 접속
-  : 'https://iceiq-api.com';       // 프로덕션 (추후 변경)
+export const API_BASE_URL = APP_ENV === 'production'
+  ? 'https://iceiq-api.com'       // 프로덕션 (추후 변경)
+  : 'https://intromissible-reprovingly-santo.ngrok-free.dev';  // 개발/미리보기: RunPod 직접 접속
 
 // API 키
 export const API_KEY = 'iceiq-dev-key-2026';
