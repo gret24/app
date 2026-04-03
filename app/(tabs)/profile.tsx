@@ -253,6 +253,37 @@ export default function ProfileScreen() {
           </Pressable>
         )}
 
+        {/* 역할 변경 */}
+        <Pressable
+          style={[p.signOutBtn, { borderColor: '#00D4FF55', backgroundColor: '#00D4FF11', marginBottom: 8 }]}
+          onPress={() => {
+            Alert.alert(
+              '역할 변경',
+              '역할 선택 화면으로 이동합니다. 현재 역할이 초기화됩니다.',
+              [
+                { text: '취소', style: 'cancel' },
+                {
+                  text: '변경하기',
+                  onPress: async () => {
+                    try {
+                      const { doc, updateDoc } = await import('firebase/firestore');
+                      const { db } = await import('../../lib/firebase');
+                      if (user) {
+                        await updateDoc(doc(db, 'users', user.uid), { role: null });
+                      }
+                      router.replace('/role-select');
+                    } catch (e) {
+                      router.replace('/role-select');
+                    }
+                  },
+                },
+              ]
+            );
+          }}
+        >
+          <Text style={[p.signOutText, { color: '#00D4FF' }]}>🔄 역할 변경 (Player / Coach / Team)</Text>
+        </Pressable>
+
         {/* Sign Out */}
         <Pressable style={p.signOutBtn} onPress={handleSignOut}>
           <Text style={p.signOutText}>Sign Out</Text>
