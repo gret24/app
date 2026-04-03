@@ -87,6 +87,17 @@ function CoachHome({ firstName }: { firstName: string }) {
         </Pressable>
       </View>
 
+      {/* Upload Game - 코치 핵심 기능 */}
+      <Pressable style={[styles.uploadBtn, { borderColor: '#34C759' }]}
+        onPress={() => router.push('/(tabs)/analysis')}>
+        <Text style={styles.uploadBtnIcon}>📹</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.uploadBtnTitle, { color: '#34C759' }]}>Upload Game Video</Text>
+          <Text style={styles.uploadBtnSub}>YouTube URL 또는 갤러리에서 영상 선택</Text>
+        </View>
+        <Text style={{ color: '#34C759', fontSize: 18 }}>→</Text>
+      </Pressable>
+
       {/* Quick actions */}
       <Text style={styles.sectionTitle}>Quick Actions</Text>
       <View style={styles.quickActions}>
@@ -153,6 +164,17 @@ function TeamHome({ firstName }: { firstName: string }) {
           </View>
         </View>
       </View>
+
+      {/* Upload Game - 팀 업로드 */}
+      <Pressable style={[styles.uploadBtn, { borderColor: '#AF52DE' }]}
+        onPress={() => router.push('/(tabs)/analysis')}>
+        <Text style={styles.uploadBtnIcon}>📹</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.uploadBtnTitle, { color: '#AF52DE' }]}>Upload Game Video</Text>
+          <Text style={styles.uploadBtnSub}>YouTube URL 또는 갤러리에서 영상 선택</Text>
+        </View>
+        <Text style={{ color: '#AF52DE', fontSize: 18 }}>→</Text>
+      </Pressable>
 
       {/* Quick actions */}
       <Text style={styles.sectionTitle}>Quick Actions</Text>
@@ -267,6 +289,13 @@ const styles = StyleSheet.create({
   },
   quickIcon: { fontSize: 28 },
   quickLabel: { fontSize: 12, fontWeight: '600', color: Colors.text, textAlign: 'center' },
+  uploadBtn: {
+    backgroundColor: '#1A1A2E', borderRadius: 14, borderWidth: 1,
+    padding: 16, flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16,
+  },
+  uploadBtnIcon: { fontSize: 28 },
+  uploadBtnTitle: { fontSize: 15, fontWeight: '700' },
+  uploadBtnSub: { fontSize: 12, color: '#888', marginTop: 2 },
   actionBtn: {
     borderRadius: 10, paddingVertical: 10, paddingHorizontal: 14,
     borderWidth: 1, alignSelf: 'flex-start',
