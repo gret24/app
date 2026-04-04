@@ -23,7 +23,7 @@
       },
       "env": {
         "APP_ENV": "preview",
-        "API_URL": "https://iceiq-api.ngrok-free.app"
+        "API_URL": "http://216.81.151.44:8000"
       },
       "node": "20.18.0"
     },

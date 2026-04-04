@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Colors } from '../../constants/Colors';
+import { JERSEY_PALETTE } from '../../constants/jerseyPalette';
 import { useRoster } from '../../contexts/RosterContext';
 import PlayerForm from '../../components/PlayerForm';
 import IceTimeDiagram from '../../components/IceTimeDiagram';
@@ -18,7 +19,8 @@ import { apiPost } from '../../api/client';
 import { API_BASE_URL } from '../../api/config';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { useAuth } from '../../contexts/AuthContext';
-import { addGame, getGames, updateGame, type GameRecord } from '../../api/gamesService';
+import { addGame, getGames, updateGame, deleteGame, type GameRecord } from '../../api/gamesService';
+import BenchSetupScreen, { BenchConfig } from '../../components/BenchSetupScreen';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
 type ViewMode = 'video' | 'diagram';
@@ -31,6 +33,7 @@ type TeamFilter = 'ALL' | 'HOME' | 'AWAY';
 interface PlayerStats {
   jersey: string;
   team: string;
+  name?: string;
   total_ice_time_min: number;
   total_shifts: number;
   total_ice_time_sec: number;
@@ -62,6 +65,14 @@ export default function PlayerAnalysisScreen() {
   const [homeRoster, setHomeRoster] = useState(''); // "4,14,47,94"
   const [awayRoster, setAwayRoster] = useState('');
   const [showRoster, setShowRoster] = useState(false);
+  const [showRosterModal, setShowRosterModal] = useState(false);
+  const [showBenchSetup, setShowBenchSetup] = useState(false);
+  const [benchConfig, setBenchConfig] = useState<BenchConfig | null>(null);
+  const [homeJerseyHex, setHomeJerseyHex] = useState<string | undefined>(undefined);
+  const [awayJerseyHex, setAwayJerseyHex] = useState<string | undefined>(undefined);
+  const [rosterForAnalysis, setRosterForAnalysis] = useState<{
+    jersey: string; name: string; team: 'HOME' | 'AWAY';
+  }[]>([]);
   const [videoStem, setVideoStem] = useState('');
   const [videoPath, setVideoPath] = useState(''); // 업로드된 영상 경로
   const [progress, setProgress] = useState(0);
@@ -96,6 +107,36 @@ export default function PlayerAnalysisScreen() {
     }).catch(() => setLoadingGames(false));
   }, [user?.uid]);
 
+  useEffect(() => {
+    if (rosterPlayers.length > 0) {
+      setRosterForAnalysis(rosterPlayers.map(p => ({
+        jersey: p.jersey,
+        name: p.name,
+        team: p.team,
+      })));
+    }
+  }, [rosterPlayers]);
+
+  const handleDeleteGame = (game: GameRecord) => {
+    Alert.alert(
+      "기록 삭제",
+      `"${game.title}" 기록을 삭제할까요?`,
+      [
+        { text: "취소", style: "cancel" },
+        {
+          text: "삭제", style: "destructive",
+          onPress: async () => {
+            if (!user?.uid) return;
+            try {
+              await deleteGame(user.uid, game.id!);
+              setMyGames(prev => prev.filter(g => g.id !== game.id));
+            } catch { Alert.alert("오류", "삭제 실패"); }
+          }
+        }
+      ]
+    );
+  };
+
   const animateProgress = (to: number) => {
     Animated.timing(progressAnim, { toValue: to, duration: 400, useNativeDriver: false }).start();
     setProgress(to);
@@ -115,17 +156,13 @@ export default function PlayerAnalysisScreen() {
     }
   };
 
-  // 서버에 YouTube URL 분석 요청
-  const analyzeYouTube = async (youtubeUrl: string) => {
-    return apiPost<{ job_id: string; video_stem: string }>('/analyze/url', {
-      youtube_url: youtubeUrl, fps: 4,
-    });
-  };
-
   // 분석 시작
-  const startAnalysis = async () => {
+  const startAnalysis = async (homeR?: string, awayR?: string, benchCfg?: BenchConfig | null) => {
     const input = url.trim();
     if (!input) { Alert.alert('오류', 'YouTube URL 또는 영상을 선택해주세요'); return; }
+
+    const finalHomeRoster = homeR ?? homeRoster;
+    const finalAwayRoster = awayR ?? awayRoster;
 
     setStep('analyzing');
     animateProgress(5);
@@ -140,13 +177,20 @@ export default function PlayerAnalysisScreen() {
       if (isYouTube) {
         setProgressMsg('YouTube 영상 다운로드 중...');
         animateProgress(10);
-        const res = await analyzeYouTube(input);
+        const res = await apiPost<{ job_id: string; video_stem: string }>('/analyze/url', {
+          youtube_url: input, fps: 4,
+          home_roster: finalHomeRoster,
+          away_roster: finalAwayRoster,
+          home_jersey_hex: homeJerseyHex ?? '',
+          away_jersey_hex: awayJerseyHex ?? '',
+          bench_config: benchCfg ?? null,
+        });
         job_id = res.job_id; stem = res.video_stem;
       } else if (isFile) {
         setProgressMsg('영상 업로드 중...');
         animateProgress(10);
         const filename = input.split('/').pop() || 'video.mp4';
-        const res = await uploadAndAnalyze(input, filename, { fps: 4, home_roster: homeRoster, away_roster: awayRoster });
+        const res = await uploadAndAnalyze(input, filename, { fps: 4, home_roster: finalHomeRoster, away_roster: finalAwayRoster });
         job_id = res.job_id; stem = res.video_stem;
         vpath = input;
       } else {
@@ -159,7 +203,9 @@ export default function PlayerAnalysisScreen() {
       }
 
       setVideoStem(stem);
-      setVideoPath(vpath || `${API_BASE_URL}/uploads/${stem}`);
+      // YouTube: 서버에 다운된 실제 경로 사용
+      const serverVideoPath = vpath || `/root/iceiq/videos/${stem}/${stem}.mp4`;
+      setVideoPath(serverVideoPath);
       // Firestore에 게임 저장
       if (user?.uid) {
         const gid = await addGame(user.uid, {
@@ -194,10 +240,22 @@ export default function PlayerAnalysisScreen() {
       // 리포트로 아이스타임 채우기
       try {
         const report = await getReport(stem);
-        const merged = mapped.map(p => {
-          const rp = report.players.find(r => r.jersey === p.jersey && r.team === p.team);
-          return rp ? { ...p, total_ice_time_min: rp.total_ice_time_min, total_shifts: rp.total_shifts, total_ice_time_sec: rp.total_ice_time_sec } : p;
-        });
+        const merged = mapped
+          .filter(p => {
+            // roster에 등록된 선수만 표시 (등록된 게 없으면 전체 표시)
+            if (rosterForAnalysis.length === 0) return true;
+            return rosterForAnalysis.some(r => r.jersey === p.jersey);
+          })
+          .map(p => {
+            const rp = report.players.find(r => r.jersey === p.jersey && r.team === p.team);
+            const rosterEntry = rosterForAnalysis.find(r => r.jersey === p.jersey && r.team === p.team)
+                          ?? rosterForAnalysis.find(r => r.jersey === p.jersey);
+            return {
+              ...(rp ? { ...p, total_ice_time_min: rp.total_ice_time_min, total_shifts: rp.total_shifts, total_ice_time_sec: rp.total_ice_time_sec } : p),
+              name: rosterEntry?.name || '',
+              team: (rosterEntry?.team ?? p.team) as 'HOME' | 'AWAY',
+            };
+          });
         setPlayers(merged.sort((a, b) => b.total_ice_time_min - a.total_ice_time_min));
       } catch {
         setPlayers(mapped);
@@ -238,10 +296,14 @@ export default function PlayerAnalysisScreen() {
 
     setGeneratingHL(true);
     try {
-      // 풀타임: 기존 분석 결과에서 바로 스트리밍
+      // 풀타임: 선수 전체 구간 하이라이트로 생성 (gap 크게 → 거의 풀타임)
       if (videoType === 'fulltime') {
-        const url = getVideoStreamUrl(videoPath);
-        setPlayerUrl(url);
+        const result = await generateHighlight(
+          videoPath, videoStem, selectedPlayer.jersey,
+          { gap: 300, buf: 10 }
+        );
+        const streamUrl = getVideoStreamUrl(result.file_path);
+        setPlayerUrl(streamUrl);
         setShowPlayer(true);
         setGeneratingHL(false);
         return;
@@ -265,6 +327,7 @@ export default function PlayerAnalysisScreen() {
     setStep('input'); setUrl(''); setVideoStem(''); setVideoPath('');
     setProgress(0); setProgressMsg(''); setPlayers([]);
     setSelectedPlayer(null); setShifts([]);
+    setHomeJerseyHex(undefined); setAwayJerseyHex(undefined);
     progressAnim.setValue(0);
   };
 
@@ -275,13 +338,148 @@ export default function PlayerAnalysisScreen() {
     <>
       <PlayerForm visible={showForm} onClose={() => setShowForm(false)}
         onSave={(p) => { addPlayer(p); setShowForm(false); }} />
+
+      {/* Roster 확인 Modal */}
+      <Modal visible={showRosterModal} animationType="slide" onRequestClose={() => setShowRosterModal(false)}>
+        <View style={{ flex: 1, backgroundColor: Colors.bg }}>
+          <View style={{ paddingTop: 60, paddingHorizontal: 20, paddingBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: Colors.text }}>📋 선수 roster 확인</Text>
+            <Pressable onPress={() => setShowRosterModal(false)}><Text style={{ color: Colors.subtext }}>취소</Text></Pressable>
+          </View>
+          <Text style={{ paddingHorizontal: 20, color: Colors.subtext, marginBottom: 12 }}>번호, 이름, 팀을 확인하고 분석을 시작하세요</Text>
+          <ScrollView contentContainerStyle={{ padding: 20, gap: 10 }}>
+            {/* 저지 색상 선택 */}
+            <View style={{ marginBottom: 16, gap: 12 }}>
+              <Text style={{ color: Colors.text, fontWeight: '700', fontSize: 15 }}>저지 색상 선택</Text>
+              {/* 홈팀 */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ color: Colors.accent, fontWeight: '700', width: 60 }}>🏠 홈팀</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {JERSEY_PALETTE.map(p => (
+                      <Pressable
+                        key={p.name}
+                        onPress={() => setHomeJerseyHex(p.hex)}
+                        style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.hex, borderWidth: 2, borderColor: homeJerseyHex === p.hex ? Colors.accent : Colors.border }}
+                      />
+                    ))}
+                  </View>
+                </ScrollView>
+                {homeJerseyHex && <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: homeJerseyHex }} />}
+              </View>
+              {/* 어웨이팀 */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                <Text style={{ color: '#FF3B30', fontWeight: '700', width: 60 }}>✈️ 어웨이</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    {JERSEY_PALETTE.map(p => (
+                      <Pressable
+                        key={p.name}
+                        onPress={() => setAwayJerseyHex(p.hex)}
+                        style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: p.hex, borderWidth: 2, borderColor: awayJerseyHex === p.hex ? '#FF3B30' : Colors.border }}
+                      />
+                    ))}
+                  </View>
+                </ScrollView>
+                {awayJerseyHex && <View style={{ width: 24, height: 24, borderRadius: 12, backgroundColor: awayJerseyHex }} />}
+              </View>
+            </View>
+            {rosterForAnalysis.map((p, i) => (
+              <View key={i} style={{ backgroundColor: Colors.card, borderRadius: 12, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: Colors.border }}>
+                <TextInput
+                  value={p.jersey}
+                  onChangeText={v => setRosterForAnalysis(prev => prev.map((r, j) => j === i ? { ...r, jersey: v } : r))}
+                  style={{ width: 50, backgroundColor: Colors.input, borderRadius: 8, padding: 8, color: Colors.text, fontWeight: '800', textAlign: 'center' }}
+                />
+                <TextInput
+                  value={p.name}
+                  onChangeText={v => setRosterForAnalysis(prev => prev.map((r, j) => j === i ? { ...r, name: v } : r))}
+                  style={{ flex: 1, backgroundColor: Colors.input, borderRadius: 8, padding: 8, color: Colors.text }}
+                />
+                <Pressable
+                  onPress={() => setRosterForAnalysis(prev => prev.map((r, j) => j === i ? { ...r, team: r.team === 'HOME' ? 'AWAY' : 'HOME' } : r))}
+                  style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8, backgroundColor: p.team === 'HOME' ? Colors.accent + '33' : '#FF3B3033' }}>
+                  <Text style={{ color: p.team === 'HOME' ? Colors.accent : '#FF3B30', fontWeight: '700', fontSize: 13 }}>{p.team}</Text>
+                </Pressable>
+                <Pressable onPress={() => setRosterForAnalysis(prev => prev.filter((_, j) => j !== i))}>
+                  <Text style={{ color: Colors.subtext, fontSize: 18 }}>✕</Text>
+                </Pressable>
+              </View>
+            ))}
+            <Pressable
+              onPress={() => setRosterForAnalysis(prev => [...prev, { jersey: '', name: '', team: 'HOME' }])}
+              style={{ padding: 14, borderRadius: 12, borderWidth: 1, borderColor: Colors.border, borderStyle: 'dashed', alignItems: 'center' }}>
+              <Text style={{ color: Colors.accent }}>+ 선수 추가</Text>
+            </Pressable>
+          </ScrollView>
+          <View style={{ padding: 20 }}>
+            <Pressable
+              style={{ backgroundColor: Colors.accent, borderRadius: 14, padding: 18, alignItems: 'center' }}
+              onPress={() => {
+                setShowRosterModal(false);
+                const homeList = rosterForAnalysis.filter(p => p.team === 'HOME').map(p => p.jersey).join(',');
+                const awayList = rosterForAnalysis.filter(p => p.team === 'AWAY').map(p => p.jersey).join(',');
+                setHomeRoster(homeList);
+                setAwayRoster(awayList);
+                setShowBenchSetup(true);
+              }}>
+              <Text style={{ color: Colors.bg, fontWeight: '800', fontSize: 16 }}>🏒 분석 시작</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <BenchSetupScreen
+        visible={showBenchSetup}
+        frameUri={videoStem ? `${API_BASE_URL}/frame/${videoStem}/first` : undefined}
+        onDone={(cfg) => {
+          setBenchConfig(cfg);
+          setShowBenchSetup(false);
+          const homeList = rosterForAnalysis.filter(p => p.team === 'HOME').map(p => p.jersey).join(',');
+          const awayList = rosterForAnalysis.filter(p => p.team === 'AWAY').map(p => p.jersey).join(',');
+          startAnalysis(homeList, awayList, cfg);
+        }}
+        onSkip={() => {
+          setShowBenchSetup(false);
+          const homeList = rosterForAnalysis.filter(p => p.team === 'HOME').map(p => p.jersey).join(',');
+          const awayList = rosterForAnalysis.filter(p => p.team === 'AWAY').map(p => p.jersey).join(',');
+          startAnalysis(homeList, awayList, null);
+        }}
+      />
+
       <ScrollView style={s.root} contentContainerStyle={s.container}>
         <View style={s.header}>
           <Pressable onPress={() => router.back()}><Text style={s.backBtn}>‹</Text></Pressable>
           <Text style={s.title}>🏒 Player 분석</Text>
-          <Pressable style={s.addBtn} onPress={() => setShowForm(true)}>
-            <Text style={s.addBtnText}>+ 선수</Text>
-          </Pressable>
+          <View style={{ width: 60 }} />
+        </View>
+
+        {/* 등록된 선수 섹션 */}
+        <View style={s.card}>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={s.cardTitle}>👥 등록된 선수 ({rosterPlayers.length}명)</Text>
+            <Pressable style={s.addBtn} onPress={() => setShowForm(true)}>
+              <Text style={s.addBtnText}>+ 선수 추가</Text>
+            </Pressable>
+          </View>
+          {rosterPlayers.length === 0 ? (
+            <Pressable style={{ padding: 20, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, borderRadius: 12, borderStyle: 'dashed' }} onPress={() => setShowForm(true)}>
+              <Text style={{ fontSize: 32, marginBottom: 8 }}>🏒</Text>
+              <Text style={{ color: Colors.subtext, textAlign: 'center' }}>선수를 먼저 등록해주세요{'\n'}분석 시 팀 구분에 사용됩니다</Text>
+            </Pressable>
+          ) : (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                {rosterPlayers.map(p => (
+                  <View key={p.id} style={{ backgroundColor: p.team === 'HOME' ? Colors.accent + '22' : '#FF3B3022', borderRadius: 10, padding: 10, alignItems: 'center', minWidth: 64, borderWidth: 1, borderColor: p.team === 'HOME' ? Colors.accent + '66' : '#FF3B3066' }}>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: Colors.text }}>#{p.jersey}</Text>
+                    <Text style={{ fontSize: 11, color: Colors.subtext, marginTop: 2 }}>{p.name.split(' ')[0]}</Text>
+                    <Text style={{ fontSize: 10, color: p.team === 'HOME' ? Colors.accent : '#FF3B30', fontWeight: '700' }}>{p.team}</Text>
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          )}
         </View>
 
         <View style={s.card}>
@@ -345,7 +543,7 @@ export default function PlayerAnalysisScreen() {
           ))}
         </View>
 
-        <Pressable style={s.analyzeBtn} onPress={startAnalysis}>
+        <Pressable style={s.analyzeBtn} onPress={() => setShowRosterModal(true)}>
           <Text style={s.analyzeBtnText}>🔍 분석 시작</Text>
         </Pressable>
 
@@ -367,11 +565,15 @@ export default function PlayerAnalysisScreen() {
                       setStep('select_player');
                       // 선수 목록 다시 로드
                       getPlayers(game.videoStem).then(data => {
-                        setPlayers(data.players.map(p => ({
-                          jersey: p.jersey,
-                          team: Object.keys(p.teams ?? {})[0] ?? 'HOME',
-                          total_ice_time_min: 0, total_shifts: 0, total_ice_time_sec: 0,
-                        })));
+                        setPlayers(data.players.map(p => {
+                          const rEntry = rosterForAnalysis.find(r => r.jersey === p.jersey);
+                          return {
+                            jersey: p.jersey,
+                            team: (rEntry?.team ?? Object.keys(p.teams ?? {})[0] ?? 'HOME') as 'HOME' | 'AWAY',
+                            name: p.name || rEntry?.name || '',
+                            total_ice_time_min: 0, total_shifts: 0, total_ice_time_sec: 0,
+                          };
+                        }));
                       }).catch(() => {});
                     }}
                   >
@@ -381,6 +583,11 @@ export default function PlayerAnalysisScreen() {
                         {game.status === 'done' ? `✅ ${game.playerCount ?? 0}명 감지` : '⏳ 분석 중'}
                       </Text>
                     </View>
+                    <Pressable
+                      onPress={() => handleDeleteGame(game)}
+                      style={{ padding: 8 }}>
+                      <Text style={{ color: "#FF3B30", fontSize: 16 }}>🗑️</Text>
+                    </Pressable>
                     <Text style={s.chevron}>›</Text>
                   </Pressable>
                 ))}
@@ -457,7 +664,10 @@ export default function PlayerAnalysisScreen() {
                 <Text style={[s.jerseyNum, { color: p.team==='HOME' ? Colors.accent : '#FF6644' }]}>#{p.jersey}</Text>
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={s.playerTeam}>{p.team}</Text>
+                {p.name ? (
+                  <Text style={{ fontSize: 14, fontWeight: "700", color: Colors.text }}>{p.name}</Text>
+                ) : null}
+                <Text style={[s.playerTeam, p.name ? { fontSize: 11 } : {}]}>{p.team}</Text>
                 {p.total_ice_time_min > 0 && (
                   <Text style={s.playerIce}>{p.total_ice_time_min.toFixed(1)}분 · {p.total_shifts}시프트</Text>
                 )}
@@ -525,24 +735,14 @@ export default function PlayerAnalysisScreen() {
                     useNativeControls
                     onError={(e) => Alert.alert('재생 오류', String(e))}
                     onPlaybackStatusUpdate={(status: AVPlaybackStatus) => {
-                      if (status.isLoaded) setPlaybackTimeMs(status.positionMillis ?? 0);
+                      // 250ms마다만 업데이트 (과부하 방지)
+                      if (status.isLoaded) {
+                        const pos = status.positionMillis ?? 0;
+                        setPlaybackTimeMs(prev => Math.abs(pos - prev) > 250 ? pos : prev);
+                      }
                     }}
                   />
-                  {/* Player Tracker overlay on video */}
-                  {!!videoStem && (
-                    <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 }} pointerEvents="none">
-                      <PlayerTracker
-                        videoStem={videoStem}
-                        currentTimeMs={playbackTimeMs}
-                        videoWidth={1920}
-                        videoHeight={1080}
-                        playerWidth={SCREEN_W}
-                        playerHeight={SCREEN_H - 200}
-                        fps={4}
-                        showLabels={labelFilter}
-                      />
-                    </View>
-                  )}
+                  {/* PlayerTracker overlay 비활성화 - 재생 중 과부하 방지 */}
                 </View>
               ) : (
                 <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>

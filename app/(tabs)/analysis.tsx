@@ -3,6 +3,7 @@ import {
   View, Text, StyleSheet, ScrollView, Pressable,
   FlatList, Dimensions, ActivityIndicator,
 } from 'react-native';
+import NewAnalysisModal from '../../components/NewAnalysisModal';
 
 import { getPlayers as apiGetPlayers, getReport as apiGetReport } from '../../api/analysisService';
 import { apiGet } from '../../api/client';
@@ -808,6 +809,7 @@ export default function AnalysisScreen() {
   const [subTab, setSubTab] = useState<SubTab>('overview');
   const [video_stem, setVideoStem] = useState('game1_val');
   const [loadingPlayers, setLoadingPlayers] = useState(true);
+  const [showNewAnalysis, setShowNewAnalysis] = useState(false);
 
   useEffect(() => {
     const fetchPlayers = async () => {
@@ -837,7 +839,19 @@ export default function AnalysisScreen() {
       {/* Header */}
       <View style={as.header}>
         <Text style={as.headerTitle}>분석</Text>
+        <Pressable style={as.newAnalysisBtn} onPress={() => setShowNewAnalysis(true)}>
+          <Text style={as.newAnalysisBtnText}>+ 새 경기 분석</Text>
+        </Pressable>
       </View>
+
+      <NewAnalysisModal
+        visible={showNewAnalysis}
+        onClose={() => setShowNewAnalysis(false)}
+        onDone={() => {
+          setShowNewAnalysis(false);
+          setLoadingPlayers(true);
+        }}
+      />
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={as.content}>
         {/* Video Selector */}
@@ -926,8 +940,18 @@ export default function AnalysisScreen() {
 
 const as = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.bg },
-  header: { paddingHorizontal: 20, paddingTop: 60, paddingBottom: 8 },
+  header: {
+    paddingHorizontal: 20, paddingTop: 60, paddingBottom: 8,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+  },
   headerTitle: { fontSize: 28, fontWeight: '800', color: Colors.text },
+  newAnalysisBtn: {
+    backgroundColor: Colors.accent,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  newAnalysisBtnText: { color: Colors.bg, fontWeight: '700', fontSize: 13 },
   content: { padding: 20, paddingBottom: 40, gap: 20 },
   section: { gap: 8 },
   sectionLabel: { fontSize: 13, fontWeight: '600', color: Colors.subtext, letterSpacing: 0.5 },

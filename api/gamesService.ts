@@ -40,6 +40,13 @@ export const updateGame = async (uid: string, gameId: string, data: Partial<Game
   await updateDoc(doc(db, "users", uid, "games", gameId), data);
 };
 
+// 게임 삭제
+export const deleteGame = async (uid: string, gameId: string): Promise<void> => {
+  const { doc, deleteDoc } = await import("firebase/firestore");
+  const { db } = await import("../lib/firebase");
+  await deleteDoc(doc(db, "users", uid, "games", gameId));
+};
+
 // 실시간 게임 목록
 export const onGamesChange = (
   uid: string,

@@ -10,6 +10,7 @@ export interface JobStatus {
 
 export interface PlayerInfo {
   jersey: string;
+  name?: string;
   detections: number;
   teams: Record<string, number>;
 }
@@ -111,4 +112,90 @@ export const getPlayers = async (videoStem: string): Promise<PlayersResponse> =>
 // 리포트 조회
 export const getReport = async (videoStem: string): Promise<ReportResponse> => {
   return apiGet(`/report/${videoStem}`);
+};
+
+// ─── 3단계 분석 플로우 ───────────────────────────────────────────────
+
+export interface RosterEntry {
+  jersey: string;
+  name: string;
+  age?: string;
+  team: 'HOME' | 'AWAY';
+  color_cluster: number; // 0 or 1 (quick 분석 결과에서 선택)
+}
+
+export interface FullAnalyzeOptions {
+  fps?: number;
+  home_color_cluster?: number; // 0 or 1
+  away_color_cluster?: number;
+  home_color?: string; // palette name from user selection
+  away_color?: string; // palette name from user selection
+  home_jersey_hex?: string;  // "#ffffff"
+  away_jersey_hex?: string;  // "#cc0000"
+  bench_config?: {
+    preset?: string;                 // "top"|"bottom"|"left"|"right"
+    home_bench?: { x_min: number; y_min: number; x_max: number; y_max: number };
+    away_bench?: { x_min: number; y_min: number; x_max: number; y_max: number };
+  } | null;
+}
+
+// 빠른 색상 추출
+export const quickAnalyze = async (
+  youtubeUrl: string,
+  minutes = 5,
+): Promise<{ job_id: string; video_stem: string }> => {
+  return apiPost('/analyze/quick', { youtube_url: youtubeUrl, minutes });
+};
+
+export interface TeamColorInfo {
+  cluster_id: number;
+  hex: string;         // "#66745b"
+  rgb: { r: number; g: number; b: number };
+  hsv: { h: number; s: number; v: number };
+  sample_count: number;
+}
+
+// 색상 결과 조회
+export const getColorPreview = async (
+  videoStem: string,
+): Promise<{ colors: string[]; team_colors: TeamColorInfo[] }> => {
+  const raw = await apiGet<{ team_colors: TeamColorInfo[]; total_samples: number }>(`/color-preview/${videoStem}`);
+  return {
+    team_colors: raw.team_colors ?? [],
+    colors: (raw.team_colors ?? []).map(c => c.hex),
+  };
+};
+
+// roster 포함 전체 분석
+export const analyzeWithRoster = async (
+  youtubeUrl: string,
+  roster: RosterEntry[],
+  colorOptions: FullAnalyzeOptions,
+): Promise<{ job_id: string; video_stem: string }> => {
+  const homeRoster = roster
+    .filter(p => p.team === 'HOME')
+    .map(p => p.jersey)
+    .join(',');
+  const awayRoster = roster
+    .filter(p => p.team === 'AWAY')
+    .map(p => p.jersey)
+    .join(',');
+  return apiPost('/analyze/url', {
+    youtube_url: youtubeUrl,
+    fps: colorOptions.fps ?? 4,
+    home_roster: homeRoster,
+    away_roster: awayRoster,
+    home_color_cluster: colorOptions.home_color_cluster ?? 0,
+    home_jersey_hex: colorOptions.home_jersey_hex ?? '',
+    away_jersey_hex: colorOptions.away_jersey_hex ?? '',
+    bench_config: colorOptions.bench_config ?? null,
+  });
+};
+
+// 선수 이름 배정
+export const assignPlayers = async (
+  videoStem: string,
+  players: RosterEntry[],
+): Promise<void> => {
+  return apiPost(`/players/${videoStem}/assign`, { players });
 };
