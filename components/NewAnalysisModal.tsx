@@ -18,10 +18,12 @@ import {
   getColorPreview,
   analyzeWithRoster,
   getAnalysisStatus,
+  prescanVideo,
   RosterEntry,
   FullAnalyzeOptions,
   JobStatus,
   TeamColorInfo,
+  PrescanResult,
 } from '../api/analysisService';
 import { POLL_INTERVAL } from '../api/config';
 
@@ -173,9 +175,24 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
   const [showPalette, setShowPalette] = useState<'home' | 'away' | null>(null);
   const [roster, setRoster] = useState<RosterEntry[]>([]);
   const [step2Loading, setStep2Loading] = useState(false);
+  const [prescanResult, setPrescanResult] = useState<PrescanResult | null>(null);
+  const [prescanLoading, setPrescanLoading] = useState(false);
   const [showBenchSetup, setShowBenchSetup] = useState(false);
   const [benchConfig, setBenchConfig] = useState<BenchConfig | null>(null);
   const [firstFrameUri, setFirstFrameUri] = useState<string>('');
+
+  // URL 입력 시 video_stem 추출 후 프레임 미리보기
+  const handleUrlChange = (text: string) => {
+    setUrl(text);
+    // YouTube URL에서 video ID 추출
+    const match = text.match(/(?:v=|youtu\.be\/|live\/|shorts\/)([A-Za-z0-9_-]{11})/);
+    if (match) {
+      const stem = match[1];
+      import('../api/config').then(({ API_BASE_URL }) => {
+        setFirstFrameUri(`${API_BASE_URL}/frame/${stem}/first`);
+      });
+    }
+  };
 
   // Step 3
   const [jobId, setJobId] = useState('');
@@ -198,6 +215,8 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
     setShowPalette(null);
     setRoster([]);
     setStep2Loading(false);
+    setPrescanResult(null);
+    setPrescanLoading(false);
     setBenchConfig(null);
     setShowBenchSetup(false);
     setJobId('');
@@ -235,6 +254,13 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
       setFirstFrameUri(`${API_BASE_URL}/frame/${result.video_stem}/first`);
       setHomeColorIdx(0);
       setStep(2);
+      // prescan 자동 실행
+      setPrescanLoading(true);
+      try {
+        const ps = await prescanVideo(result.video_stem, homePickedColor ?? undefined, awayPickedColor ?? undefined);
+        setPrescanResult(ps);
+      } catch {}
+      setPrescanLoading(false);
     } catch (e: any) {
       Alert.alert('분석 오류', e.message ?? '빠른 분석에 실패했습니다.');
     } finally {
@@ -377,7 +403,7 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
                 placeholder="https://youtube.com/watch?v=..."
                 placeholderTextColor={Colors.subtext}
                 value={url}
-                onChangeText={setUrl}
+                onChangeText={handleUrlChange}
                 autoCapitalize="none"
                 autoCorrect={false}
                 keyboardType="url"
@@ -402,6 +428,63 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
           {/* ── Step 2 ── */}
           {step === 2 && (
             <>
+              {/* prescan 결과 */}
+              {prescanLoading && (
+                <View style={s.card}>
+                  <ActivityIndicator color={Colors.accent} />
+                  <Text style={{ color: Colors.subtext, marginTop: 8, textAlign: "center" }}>영상 품질 분석 중...</Text>
+                </View>
+              )}
+              {prescanResult && !prescanLoading && (
+                <View style={[s.card, {
+                  borderColor:
+                    prescanResult.verdict === "PASS" ? "#34C759" :
+                    prescanResult.verdict === "FAIL" ? "#FF3B30" : "#FFD700",
+                  borderWidth: 2,
+                }]}>
+                  <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                    <Text style={{ fontSize: 16, fontWeight: "800", color: Colors.text }}>
+                      {prescanResult.verdict === "PASS" ? "✅" :
+                       prescanResult.verdict === "FAIL" ? "❌" : "⚠️"} 영상 품질: {prescanResult.verdict}
+                    </Text>
+                    <Text style={{ color: Colors.subtext }}>{prescanResult.score}/{prescanResult.max_score}점</Text>
+                  </View>
+
+                  {/* 항목별 간략 표시 */}
+                  <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
+                    {Object.entries(prescanResult.checks).map(([key, val]) => {
+                      const label: Record<string, string> = {
+                        player_size: "선수크기", detection_count: "감지수",
+                        ocr_readability: "번호인식", team_distinction: "팀구분",
+                        camera_stability: "안정성", rink_coverage: "커버리지",
+                      };
+                      const emoji = val.grade === "excellent" ? "⭐" : val.grade === "good" ? "✅" : val.grade === "fair" ? "⚠️" : "❌";
+                      return (
+                        <View key={key} style={{ backgroundColor: Colors.input, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 }}>
+                          <Text style={{ fontSize: 11, color: Colors.text }}>{emoji} {label[key]}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+
+                  {/* 개선 팁 */}
+                  {prescanResult.tips.length > 0 && (
+                    <View style={{ marginTop: 10 }}>
+                      {prescanResult.tips.slice(0, 2).map((tip, i) => (
+                        <Text key={i} style={{ color: "#FFD700", fontSize: 12, marginTop: 4 }}>
+                          {tip.title}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* 가능 기능 */}
+                  <Text style={{ color: Colors.subtext, fontSize: 11, marginTop: 8 }}>
+                    가능: {Object.entries(prescanResult.features).filter(([, v]) => v.startsWith("✅")).map(([k]) => k).join(", ")}
+                  </Text>
+                </View>
+              )}
+
               {/* 색상 선택 */}
               <View style={s.card}>
                 <Text style={s.cardTitle}>🎨 팀 색상 선택</Text>

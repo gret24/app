@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   View, Text, Modal, Pressable, Image, PanResponder, Dimensions, StyleSheet, ScrollView
 } from "react-native";
@@ -22,8 +22,19 @@ interface Props {
   onSkip: () => void;
 }
 
-export default function BenchSetupScreen({ visible, frameUri, frameW = 1280, frameH = 720, onDone, onSkip }: Props) {
+export default function BenchSetupScreen({ visible, frameUri: propFrameUri, frameW = 1280, frameH = 720, onDone, onSkip }: Props) {
   const [step, setStep] = useState<"home"|"away">("home");
+  const [frameUri, setFrameUri] = useState<string | undefined>(propFrameUri);
+
+  // visible 열릴 때마다 frameUri 업데이트
+  useEffect(() => {
+    if (visible) {
+      if (propFrameUri) {
+        setFrameUri(propFrameUri);
+      }
+      // propFrameUri 없어도 일단 시도 (이미 로드됐을 수 있음)
+    }
+  }, [visible, propFrameUri]);
   const [homeBox, setHomeBox] = useState<BenchBox | null>(null);
   const [awayBox, setAwayBox] = useState<BenchBox | null>(null);
   const [dragging, setDragging] = useState<{sx:number;sy:number;ex:number;ey:number} | null>(null);
@@ -124,10 +135,16 @@ export default function BenchSetupScreen({ visible, frameUri, frameW = 1280, fra
           <View style={[s.frameContainer, { width: dispW, height: dispH }]}
                 {...panResponder.panHandlers}>
             {frameUri ? (
-              <Image source={{ uri: frameUri }} style={{ width: dispW, height: dispH }} resizeMode="contain" />
+              <Image
+                source={{ uri: frameUri }}
+                style={{ width: dispW, height: dispH }}
+                resizeMode="contain"
+                onError={() => setFrameUri(undefined)}
+              />
             ) : (
               <View style={[s.framePlaceholder, { width: dispW, height: dispH }]}>
-                <Text style={s.framePlaceholderText}>프레임 로딩 중...</Text>
+                <Text style={s.framePlaceholderText}>📷 프리셋 버튼으로{"
+"}벤치 방향을 선택하세요</Text>
               </View>
             )}
             {/* 드래그 중 사각형 */}

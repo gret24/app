@@ -109,11 +109,8 @@ export default function PlayerAnalysisScreen() {
 
   useEffect(() => {
     if (rosterPlayers.length > 0) {
-      setRosterForAnalysis(rosterPlayers.map(p => ({
-        jersey: p.jersey,
-        name: p.name,
-        team: p.team,
-      })));
+      const p = rosterPlayers[0];
+      setRosterForAnalysis([{ jersey: p.jersey, name: p.name, team: p.team }]);
     }
   }, [rosterPlayers]);
 
@@ -343,7 +340,7 @@ export default function PlayerAnalysisScreen() {
       <Modal visible={showRosterModal} animationType="slide" onRequestClose={() => setShowRosterModal(false)}>
         <View style={{ flex: 1, backgroundColor: Colors.bg }}>
           <View style={{ paddingTop: 60, paddingHorizontal: 20, paddingBottom: 16, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ fontSize: 22, fontWeight: '800', color: Colors.text }}>📋 선수 roster 확인</Text>
+            <Text style={{ fontSize: 22, fontWeight: '800', color: Colors.text }}>📋 내 선수 확인</Text>
             <Pressable onPress={() => setShowRosterModal(false)}><Text style={{ color: Colors.subtext }}>취소</Text></Pressable>
           </View>
           <Text style={{ paddingHorizontal: 20, color: Colors.subtext, marginBottom: 12 }}>번호, 이름, 팀을 확인하고 분석을 시작하세요</Text>
@@ -454,38 +451,56 @@ export default function PlayerAnalysisScreen() {
           <View style={{ width: 60 }} />
         </View>
 
-        {/* 등록된 선수 섹션 */}
+        {/* 내 선수 (1명) */}
         <View style={s.card}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <Text style={s.cardTitle}>👥 등록된 선수 ({rosterPlayers.length}명)</Text>
-            <Pressable style={s.addBtn} onPress={() => setShowForm(true)}>
-              <Text style={s.addBtnText}>+ 선수 추가</Text>
-            </Pressable>
-          </View>
+          <Text style={[s.cardTitle, { marginBottom: 12 }]}>👤 내 선수</Text>
           {rosterPlayers.length === 0 ? (
-            <Pressable style={{ padding: 20, alignItems: 'center', borderWidth: 1, borderColor: Colors.border, borderRadius: 12, borderStyle: 'dashed' }} onPress={() => setShowForm(true)}>
-              <Text style={{ fontSize: 32, marginBottom: 8 }}>🏒</Text>
-              <Text style={{ color: Colors.subtext, textAlign: 'center' }}>선수를 먼저 등록해주세요{'\n'}분석 시 팀 구분에 사용됩니다</Text>
+            <Pressable
+              style={{ padding: 24, alignItems: 'center', borderWidth: 1,
+                       borderColor: Colors.border, borderRadius: 12, borderStyle: 'dashed' }}
+              onPress={() => setShowForm(true)}>
+              <Text style={{ fontSize: 40, marginBottom: 8 }}>🏒</Text>
+              <Text style={{ color: Colors.accent, fontWeight: '700', fontSize: 16 }}>선수 등록</Text>
+              <Text style={{ color: Colors.subtext, fontSize: 12, marginTop: 4 }}>
+                내 번호, 이름, 팀을 등록하세요
+              </Text>
             </Pressable>
           ) : (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                {rosterPlayers.map(p => (
-                  <View key={p.id} style={{ backgroundColor: p.team === 'HOME' ? Colors.accent + '22' : '#FF3B3022', borderRadius: 10, padding: 10, alignItems: 'center', minWidth: 64, borderWidth: 1, borderColor: p.team === 'HOME' ? Colors.accent + '66' : '#FF3B3066' }}>
-                    <Text style={{ fontSize: 18, fontWeight: '800', color: Colors.text }}>#{p.jersey}</Text>
-                    <Text style={{ fontSize: 11, color: Colors.subtext, marginTop: 2 }}>{p.name.split(' ')[0]}</Text>
-                    <Text style={{ fontSize: 10, color: p.team === 'HOME' ? Colors.accent : '#FF3B30', fontWeight: '700' }}>{p.team}</Text>
-                  </View>
-                ))}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+              {/* 선수 정보 크게 */}
+              <View style={{
+                backgroundColor: rosterPlayers[0].team === 'HOME' ? Colors.accent + '22' : '#FF3B3022',
+                borderRadius: 16, padding: 16, alignItems: 'center', minWidth: 90,
+                borderWidth: 2, borderColor: rosterPlayers[0].team === 'HOME' ? Colors.accent : '#FF3B30'
+              }}>
+                <Text style={{ fontSize: 28, fontWeight: '900', color: Colors.text }}>
+                  #{rosterPlayers[0].jersey}
+                </Text>
+                <Text style={{ fontSize: 13, color: Colors.subtext, marginTop: 2 }}>
+                  {rosterPlayers[0].name}
+                </Text>
+                <Text style={{ fontSize: 11, color: rosterPlayers[0].team === 'HOME' ? Colors.accent : '#FF3B30',
+                                fontWeight: '700', marginTop: 4 }}>
+                  {rosterPlayers[0].position} · {rosterPlayers[0].team}
+                </Text>
               </View>
-            </ScrollView>
+              {/* 수정/변경 버튼 */}
+              <Pressable style={s.addBtn} onPress={() => setShowForm(true)}>
+                <Text style={s.addBtnText}>✏️ 수정</Text>
+              </Pressable>
+            </View>
           )}
         </View>
 
         <View style={s.card}>
           <Text style={s.cardTitle}>📎 YouTube URL</Text>
           <TextInput
-            style={s.input} value={url} onChangeText={setUrl}
+            style={s.input} value={url}
+            onChangeText={(text) => {
+              setUrl(text);
+              const m = text.match(/(?:v=|youtu\.be\/|live\/|shorts\/)([A-Za-z0-9_-]{11})/);
+              if (m) setVideoStem(m[1]);
+            }}
             placeholder="https://youtube.com/watch?v=..."
             placeholderTextColor={Colors.subtext}
             autoCapitalize="none" autoCorrect={false}

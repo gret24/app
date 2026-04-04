@@ -24,14 +24,7 @@ interface RosterContextType {
 const RosterContext = createContext<RosterContextType | null>(null);
 
 // 기본 mock 선수 목록
-const DEFAULT_PLAYERS: Player[] = [
-  { id: '1', name: 'Alex Smith',   jersey: '91', position: 'C',  shoot: 'L', age: 28, team: 'HOME' },
-  { id: '2', name: 'Marc Lee',     jersey: '24', position: 'LW', shoot: 'L', age: 22, team: 'HOME' },
-  { id: '3', name: 'Tyler Brown',  jersey: '96', position: 'D',  shoot: 'R', age: 31, team: 'HOME' },
-  { id: '4', name: 'Chris Park',   jersey: '2',  position: 'D',  shoot: 'R', age: 26, team: 'HOME' },
-  { id: '5', name: 'Ryan Kim',     jersey: '21', position: 'RW', shoot: 'R', age: 19, team: 'HOME' },
-  { id: '6', name: 'Sam Johnson',  jersey: '5',  position: 'LW', shoot: 'L', age: 24, team: 'AWAY' },
-];
+const DEFAULT_PLAYERS: Player[] = [];
 
 export function RosterProvider({ children }: { children: React.ReactNode }) {
   const [players, setPlayers] = useState<Player[]>(DEFAULT_PLAYERS);

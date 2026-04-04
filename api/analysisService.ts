@@ -192,6 +192,34 @@ export const analyzeWithRoster = async (
   });
 };
 
+// ─── Prescan ─────────────────────────────────────────────────────────
+
+export interface PrescanResult {
+  verdict: "PASS" | "PARTIAL" | "LIMITED" | "FAIL";
+  score: number;
+  max_score: number;
+  checks: {
+    player_size:       { grade: string; score: number; median_height_px: number; detail: string };
+    detection_count:   { grade: string; score: number; avg_count: number; detail: string };
+    ocr_readability:   { grade: string; score: number; success_rate_pct: number; detail: string };
+    team_distinction:  { grade: string; score: number; hsv_distance: number; detail: string };
+    camera_stability:  { grade: string; score: number; avg_movement_px: number; detail: string };
+    rink_coverage:     { grade: string; score: number; coverage_pct: number; detail: string };
+  };
+  features: Record<string, string>;
+  tips: { title: string; solutions: string[] }[];
+  ideal_guide: { title: string; tips: string[] };
+}
+
+export const prescanVideo = async (videoStem: string, homeHex?: string, awayHex?: string): Promise<PrescanResult> => {
+  const params: Record<string, string> = {
+    video_url: `https://youtube.com/watch?v=${videoStem}`,
+  };
+  if (homeHex) params.home_hex = homeHex;
+  if (awayHex) params.away_hex = awayHex;
+  return apiPost("/prescan", params);
+};
+
 // 선수 이름 배정
 export const assignPlayers = async (
   videoStem: string,
