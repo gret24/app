@@ -21,9 +21,10 @@ import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { useAuth } from '../../contexts/AuthContext';
 import { addGame, getGames, updateGame, deleteGame, type GameRecord } from '../../api/gamesService';
 import BenchSetupScreen, { BenchConfig } from '../../components/BenchSetupScreen';
+import HeatmapView from '../../components/HeatmapView';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-type ViewMode = 'video' | 'diagram';
+type ViewMode = 'video' | 'diagram' | 'heatmap';
 type LabelFilter = 'ALL' | 'HOME' | 'AWAY' | 'OFF';
 
 type AppStep = 'input' | 'analyzing' | 'select_player' | 'select_option';
@@ -728,6 +729,12 @@ export default function PlayerAnalysisScreen() {
               >
                 <Text style={{ color: viewMode === 'diagram' ? '#000' : '#888', fontSize: 12, fontWeight: '700' }}>🗺 Diagram</Text>
               </Pressable>
+              <Pressable
+                style={{ paddingHorizontal: 10, paddingVertical: 6, backgroundColor: viewMode === 'heatmap' ? Colors.accent : 'transparent' }}
+                onPress={() => setViewMode('heatmap')}
+              >
+                <Text style={{ color: viewMode === 'heatmap' ? '#000' : '#888', fontSize: 12, fontWeight: '700' }}>🔥 Heatmap</Text>
+              </Pressable>
             </View>
           )}
           <Pressable onPress={() => setShowPlayer(false)} style={{ padding: 8 }}>
@@ -782,6 +789,14 @@ export default function PlayerAnalysisScreen() {
                 </View>
               )}
             </>
+          ) : viewMode === 'heatmap' ? (
+            /* ── HEATMAP VIEW ── */
+            <View style={{ flex: 1, backgroundColor: '#020617' }}>
+              <HeatmapView
+                videoStem={videoStem ?? ''}
+                initialJersey={selectedPlayer?.jersey}
+              />
+            </View>
           ) : (
             /* ── DIAGRAM VIEW ── */
             <View style={{ flex: 1, backgroundColor: '#0D1B2A', position: 'relative' }}>
