@@ -15,7 +15,7 @@ import { getAllTracks, getAllPlayersAtTime } from '../../api/trackingService';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadAndAnalyze, waitForAnalysis, getPlayers, getReport } from '../../api/analysisService';
 import { generateHighlight, getVideoStreamUrl } from '../../api/highlightService';
-import { apiPost } from '../../api/client';
+import { apiPost, apiGet } from '../../api/client';
 import { API_BASE_URL } from '../../api/config';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { useAuth } from '../../contexts/AuthContext';
@@ -275,17 +275,17 @@ export default function PlayerAnalysisScreen() {
   };
 
   const loadShifts = () => {
+    if (!videoStem || !selectedPlayer) return;
     setLoadingShifts(true);
-    setTimeout(() => {
-      setShifts([
-        { shift_number: 1, start_time: 109, end_time: 121, duration: 12 },
-        { shift_number: 2, start_time: 203, end_time: 230, duration: 27 },
-        { shift_number: 3, start_time: 400, end_time: 445, duration: 45 },
-        { shift_number: 4, start_time: 700, end_time: 762, duration: 62 },
-        { shift_number: 5, start_time: 1100, end_time: 1155, duration: 55 },
-      ]);
+    apiGet<{ shifts: ShiftItem[]; total_shifts: number; total_ice_time_sec: number }>(
+      `/shifts/${videoStem}/${selectedPlayer.jersey}`
+    ).then(res => {
+      setShifts(res.shifts ?? []);
+    }).catch(() => {
+      setShifts([]);
+    }).finally(() => {
       setLoadingShifts(false);
-    }, 600);
+    });
   };
 
   const handlePlay = async () => {
