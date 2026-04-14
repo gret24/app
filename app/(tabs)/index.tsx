@@ -2,208 +2,65 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Pressable, ScrollView } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '../../contexts/AuthContext';
-import { Colors, Spacing, Radius, Fonts } from '../../constants/Colors';
-import { LinearGradient } from 'expo-linear-gradient';
+import { Colors } from '../../constants/Colors';
 
-// ─── IQ Score Ring ────────────────────────────────────────────────────────────
-function IQRing({ score }: { score: number }) {
-  const SIZE = 160;
-  const R = 68;
-  const CIRC = 2 * Math.PI * R;
-  const offset = CIRC * (1 - score / 100);
-  return (
-    <View style={{ width: SIZE, height: SIZE, alignItems: 'center', justifyContent: 'center' }}>
-      {/* SVG-like ring via View circles */}
-      <View style={iqStyles.ringBg} />
-      <View style={[iqStyles.ringFill, {
-        borderColor: Colors.accent,
-        // simulate arc via border trick — simplified visual
-        opacity: score / 100,
-      }]} />
-      <View style={iqStyles.center}>
-        <Text style={iqStyles.scoreNum}>{score}</Text>
-        <Text style={iqStyles.scoreLabel}>IQ SCORE</Text>
-      </View>
-      {/* Glow */}
-      <View style={iqStyles.glow} />
-    </View>
-  );
-}
-
-const iqStyles = StyleSheet.create({
-  ringBg: { position: 'absolute', width: 144, height: 144, borderRadius: 72, borderWidth: 2, borderColor: Colors.cardHighest },
-  ringFill: { position: 'absolute', width: 144, height: 144, borderRadius: 72, borderWidth: 6 },
-  center: { position: 'absolute', alignItems: 'center' },
-  scoreNum: { fontFamily: Fonts.headlineBold, fontSize: 52, color: Colors.text },
-  scoreLabel: { fontFamily: Fonts.headline, fontSize: 9, letterSpacing: 3, color: Colors.accentLight, textTransform: 'uppercase' },
-  glow: { position: 'absolute', width: 100, height: 100, borderRadius: 50, backgroundColor: Colors.accentGlow },
-});
-
-// ─── Player Home — Kinetic Edge ───────────────────────────────────────────────
+// ─── Player Home ─────────────────────────────────────────────────────────────
 function PlayerHome({ firstName }: { firstName: string }) {
   const router = useRouter();
-
-  const quickActions = [
-    { icon: '📊', label: '데이터 분석', route: '/(tabs)/stats' as const },
-    { icon: '🗺️', label: '히트맵', route: '/(player)' as const },
-    { icon: '🎬', label: '경기 분석', route: '/(tabs)/analysis' as const },
-    { icon: '📈', label: '성장 지표', route: '/(tabs)/growth' as const },
-  ];
-
   return (
-    <ScrollView style={homeStyles.root} contentContainerStyle={homeStyles.content} showsVerticalScrollIndicator={false}>
-
-      {/* ── Game IQ Card ── */}
-      <View style={homeStyles.iqCard}>
-        {/* Left */}
-        <View style={homeStyles.iqLeft}>
-          <Text style={homeStyles.iqMeta}>INTELLIGENCE METRIC</Text>
-          <Text style={homeStyles.iqTitle}>Game IQ Score</Text>
-          <View style={homeStyles.iqBadge}>
-            <Text style={homeStyles.iqBadgeText}>📈 +4.2% SINCE LAST GAME</Text>
-          </View>
+    <ScrollView contentContainerStyle={styles.content}>
+      <View style={styles.welcomeRow}>
+        <View>
+          <Text style={styles.welcome}>Hey, {firstName} 🏒</Text>
+          <Text style={styles.subtitle}>Track your performance & skill growth</Text>
         </View>
-        {/* Right: ring */}
-        <IQRing score={88} />
-        {/* Ambient glow */}
-        <View style={homeStyles.iqGlow} />
-        {/* Left accent border */}
-        <View style={homeStyles.iqAccentBar} />
       </View>
 
-      {/* ── Quick Actions ── */}
-      <View style={homeStyles.quickGrid}>
-        {quickActions.map((a) => (
-          <Pressable key={a.label} style={homeStyles.quickCard}
-            onPress={() => router.push(a.route)}
-            android_ripple={{ color: Colors.accentGlow }}>
-            <View style={homeStyles.quickIconBox}>
-              <Text style={{ fontSize: 22 }}>{a.icon}</Text>
-            </View>
-            <Text style={homeStyles.quickLabel}>{a.label}</Text>
-          </Pressable>
-        ))}
+      {/* Game IQ card */}
+      <View style={[styles.card, { borderColor: '#00D4FF55' }]}>
+        <View style={styles.cardHeader}>
+          <Text style={styles.cardLabel}>GAME IQ</Text>
+          <Text style={[styles.cardValue, { color: '#00D4FF' }]}>72</Text>
+        </View>
+        <Text style={styles.cardDesc}>Advanced — Top 28% of players</Text>
+        <View style={styles.progressBarBg}>
+          <View style={[styles.progressBarFill, { width: '72%', backgroundColor: '#00D4FF' }]} />
+        </View>
       </View>
 
-      {/* ── Upcoming Match ── */}
-      <LinearGradient
-        colors={['rgba(0,212,255,0.08)', 'rgba(0,212,255,0.02)']}
-        style={homeStyles.matchCard}
-      >
-        <Text style={homeStyles.matchMeta}>NEXT MATCH</Text>
-        <View style={homeStyles.matchRow}>
-          <View style={homeStyles.matchTeam}>
-            <View style={homeStyles.teamBadge}><Text style={{ fontSize: 24 }}>🛡️</Text></View>
-            <Text style={homeStyles.teamName}>G. KINETIC</Text>
-          </View>
-          <View style={homeStyles.matchCenter}>
-            <Text style={homeStyles.vsText}>VS</Text>
-            <Text style={homeStyles.matchDate}>SEP 24 · 19:30</Text>
-          </View>
-          <View style={homeStyles.matchTeam}>
-            <View style={[homeStyles.teamBadge, { borderColor: Colors.error + '44' }]}>
-              <Text style={{ fontSize: 24 }}>❄️</Text>
-            </View>
-            <Text style={homeStyles.teamName}>TITANS FC</Text>
-          </View>
-        </View>
-        <Pressable style={homeStyles.strategyBtn} onPress={() => router.push('/(tabs)/scouting')}>
-          <Text style={homeStyles.strategyBtnText}>STRATEGY BRIEF →</Text>
+      {/* Quick actions */}
+      <Text style={styles.sectionTitle}>빠른 메뉴</Text>
+      <View style={styles.quickActions}>
+        <Pressable style={styles.quickBtn} onPress={() => router.push('/(player)')}>
+          <Text style={styles.quickIcon}>🏒</Text>
+          <Text style={styles.quickLabel}>경기 분석</Text>
         </Pressable>
-      </LinearGradient>
-
-      {/* ── Recent Highlight ── */}
-      <View style={homeStyles.highlightCard}>
-        <View style={homeStyles.highlightInner}>
-          <LinearGradient
-            colors={['#0E0E13', '#1B1B20']}
-            style={homeStyles.highlightBg}
-          >
-            <View style={homeStyles.liveChip}>
-              <View style={homeStyles.liveDot} />
-              <Text style={homeStyles.liveText}>LIVE TRACKING ENABLED</Text>
-            </View>
-          </LinearGradient>
-          <View style={homeStyles.highlightOverlay}>
-            <View style={homeStyles.highlightBottom}>
-              <View>
-                <View style={homeStyles.newBadge}><Text style={homeStyles.newBadgeText}>NEW RELEASE</Text></View>
-                <Text style={homeStyles.highlightTitle}>최근 하이라이트</Text>
-                <Text style={homeStyles.highlightSub}>Game Week 14: Precision passing analysis</Text>
-              </View>
-              <Pressable style={homeStyles.playBtn} onPress={() => router.push('/(player)')}>
-                <Text style={{ color: Colors.accent, fontSize: 28 }}>▶</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
+        <Pressable style={styles.quickBtn} onPress={() => router.push('/(player)/growth')}>
+          <Text style={styles.quickIcon}>📈</Text>
+          <Text style={styles.quickLabel}>성장 지표</Text>
+        </Pressable>
+        <Pressable style={styles.quickBtn} onPress={() => router.push('/(player)/scouting')}>
+          <Text style={styles.quickIcon}>🔍</Text>
+          <Text style={styles.quickLabel}>스카우팅</Text>
+        </Pressable>
+        <Pressable style={styles.quickBtn} onPress={() => router.push('/(tabs)/stats')}>
+          <Text style={styles.quickIcon}>📊</Text>
+          <Text style={styles.quickLabel}>내 스탯</Text>
+        </Pressable>
       </View>
 
-      <View style={{ height: 32 }} />
+      {/* Recent highlight */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>최근 하이라이트</Text>
+        <Text style={styles.cardDesc}>경기 영상을 업로드하면 하이라이트를 볼 수 있어요</Text>
+        <Pressable style={[styles.actionBtn, { backgroundColor: '#00D4FF22', borderColor: '#00D4FF55' }]}
+          onPress={() => router.push('/(player)')}>
+          <Text style={[styles.actionBtnText, { color: '#00D4FF' }]}>Analyze a Game →</Text>
+        </Pressable>
+      </View>
     </ScrollView>
   );
 }
-
-const homeStyles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bg },
-  content: { paddingHorizontal: Spacing.lg, paddingTop: 72, paddingBottom: 24, gap: Spacing.lg },
-
-  // IQ Card
-  iqCard: {
-    backgroundColor: 'rgba(53,52,58,0.4)',
-    borderRadius: Radius.lg, padding: Spacing.xl,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderTopWidth: 1, borderTopColor: 'rgba(168,232,255,0.1)',
-    overflow: 'hidden', position: 'relative', minHeight: 200,
-    borderLeftWidth: 4, borderLeftColor: Colors.accent,
-  },
-  iqLeft: { flex: 1, gap: 6 },
-  iqMeta: { fontFamily: Fonts.headline, fontSize: 9, letterSpacing: 3, color: Colors.accentLight + '99', textTransform: 'uppercase' },
-  iqTitle: { fontFamily: Fonts.headlineBold, fontSize: 20, color: Colors.text },
-  iqBadge: { backgroundColor: Colors.accentGlow, borderRadius: Radius.md, paddingHorizontal: 8, paddingVertical: 4, alignSelf: 'flex-start', marginTop: 4 },
-  iqBadgeText: { fontFamily: Fonts.bodyBold, fontSize: 10, color: Colors.accentLight, letterSpacing: 0.5 },
-  iqGlow: { position: 'absolute', top: -30, right: -30, width: 100, height: 100, borderRadius: 50, backgroundColor: Colors.accentGlow },
-  iqAccentBar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, backgroundColor: Colors.accent, borderRadius: Radius.sm },
-
-  // Quick grid
-  quickGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  quickCard: {
-    width: '47.5%', backgroundColor: 'rgba(53,52,58,0.4)',
-    borderRadius: Radius.lg, padding: Spacing.lg,
-    borderTopWidth: 1, borderTopColor: 'rgba(168,232,255,0.1)',
-    gap: Spacing.lg, minHeight: 110, justifyContent: 'space-between',
-  },
-  quickIconBox: { backgroundColor: Colors.cardHighest, width: 40, height: 40, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center' },
-  quickLabel: { fontFamily: Fonts.bodyBold, fontSize: 14, color: Colors.text },
-
-  // Match card
-  matchCard: { borderRadius: Radius.lg, padding: Spacing.xl, gap: Spacing.lg },
-  matchMeta: { fontFamily: Fonts.headline, fontSize: 9, letterSpacing: 3, color: Colors.accentLight + '99', textTransform: 'uppercase' },
-  matchRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  matchTeam: { alignItems: 'center', gap: 6 },
-  teamBadge: { width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.card, borderWidth: 1, borderColor: Colors.accentLight + '33', alignItems: 'center', justifyContent: 'center' },
-  teamName: { fontFamily: Fonts.headline, fontSize: 9, letterSpacing: 2, color: Colors.accentLight + '66', textTransform: 'uppercase' },
-  matchCenter: { alignItems: 'center', gap: 4 },
-  vsText: { fontFamily: Fonts.headlineBold, fontSize: 20, color: Colors.cardHighest },
-  matchDate: { fontFamily: Fonts.bodyBold, fontSize: 10, color: Colors.accent, backgroundColor: Colors.accentGlow, paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.xl },
-  strategyBtn: { backgroundColor: Colors.accent, borderRadius: Radius.md, paddingVertical: 12, alignItems: 'center' },
-  strategyBtnText: { fontFamily: Fonts.headlineBold, fontSize: 12, color: '#003642', letterSpacing: 2.5 },
-
-  // Highlight
-  highlightCard: { borderRadius: Radius.lg, overflow: 'hidden', height: 200 },
-  highlightInner: { flex: 1 },
-  highlightBg: { position: 'absolute', inset: 0, width: '100%', height: '100%' } as any,
-  liveChip: { position: 'absolute', top: 16, right: 16, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: 'rgba(53,52,58,0.4)', borderRadius: Radius.md, paddingHorizontal: 10, paddingVertical: 5, borderTopWidth: 1, borderTopColor: 'rgba(168,232,255,0.1)' },
-  liveDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.accent },
-  liveText: { fontFamily: Fonts.headline, fontSize: 8, letterSpacing: 2, color: Colors.text, textTransform: 'uppercase' },
-  highlightOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: Spacing.xl, backgroundColor: 'rgba(19,19,24,0.6)' },
-  highlightBottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  newBadge: { backgroundColor: Colors.accent, borderRadius: Radius.xl, paddingHorizontal: 8, paddingVertical: 2, alignSelf: 'flex-start', marginBottom: 4 },
-  newBadgeText: { fontFamily: Fonts.headline, fontSize: 8, color: '#003642', letterSpacing: 2, fontWeight: '700' },
-  highlightTitle: { fontFamily: Fonts.headlineBold, fontSize: 20, color: Colors.text },
-  highlightSub: { fontFamily: Fonts.body, fontSize: 11, color: Colors.subtext },
-  playBtn: { width: 56, height: 56, borderRadius: 28, backgroundColor: 'rgba(0,212,255,0.2)', borderWidth: 1, borderColor: 'rgba(0,212,255,0.5)', alignItems: 'center', justifyContent: 'center' },
-});
 
 // ─── Coach Home ───────────────────────────────────────────────────────────────
 function CoachHome({ firstName }: { firstName: string }) {
@@ -236,7 +93,7 @@ function CoachHome({ firstName }: { firstName: string }) {
         <Text style={styles.uploadBtnIcon}>📹</Text>
         <View style={{ flex: 1 }}>
           <Text style={[styles.uploadBtnTitle, { color: '#34C759' }]}>경기 영상 업로드</Text>
-          <Text style={styles.uploadBtnSub}>YouTube URL 또는 갤러리에서 영상 선택</Text>
+          <Text style={styles.uploadBtnSub}>갤러리에서 경기 영상 선택</Text>
         </View>
         <Text style={{ color: '#34C759', fontSize: 18 }}>→</Text>
       </Pressable>
@@ -244,17 +101,17 @@ function CoachHome({ firstName }: { firstName: string }) {
       {/* Quick actions */}
       <Text style={styles.sectionTitle}>빠른 메뉴</Text>
       <View style={styles.quickActions}>
-        <Pressable style={styles.quickBtn} onPress={() => router.push('/(team)')}>
-          <Text style={styles.quickIcon}>🏟️</Text>
-          <Text style={styles.quickLabel}>팀 분석</Text>
-        </Pressable>
         <Pressable style={styles.quickBtn} onPress={() => router.push('/(player)')}>
           <Text style={styles.quickIcon}>🏒</Text>
-          <Text style={styles.quickLabel}>선수 스탯</Text>
+          <Text style={styles.quickLabel}>선수 분석</Text>
         </Pressable>
-        <Pressable style={styles.quickBtn} onPress={() => router.push('/(tabs)/learn')}>
-          <Text style={styles.quickIcon}>🧠</Text>
-          <Text style={styles.quickLabel}>전술 보드</Text>
+        <Pressable style={styles.quickBtn} onPress={() => router.push('/(player)/scouting')}>
+          <Text style={styles.quickIcon}>🔍</Text>
+          <Text style={styles.quickLabel}>스카우팅</Text>
+        </Pressable>
+        <Pressable style={styles.quickBtn} onPress={() => router.push('/(player)/growth')}>
+          <Text style={styles.quickIcon}>📈</Text>
+          <Text style={styles.quickLabel}>선수 성장</Text>
         </Pressable>
         <Pressable style={styles.quickBtn} onPress={() => router.push('/(tabs)/analysis')}>
           <Text style={styles.quickIcon}>📊</Text>
@@ -314,7 +171,7 @@ function TeamHome({ firstName }: { firstName: string }) {
         <Text style={styles.uploadBtnIcon}>📹</Text>
         <View style={{ flex: 1 }}>
           <Text style={[styles.uploadBtnTitle, { color: '#AF52DE' }]}>경기 영상 업로드</Text>
-          <Text style={styles.uploadBtnSub}>YouTube URL 또는 갤러리에서 영상 선택</Text>
+          <Text style={styles.uploadBtnSub}>갤러리에서 경기 영상 선택</Text>
         </View>
         <Text style={{ color: '#AF52DE', fontSize: 18 }}>→</Text>
       </Pressable>
