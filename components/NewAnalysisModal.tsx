@@ -597,12 +597,14 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
               </View>
 
               <Pressable
-                style={[s.primaryBtn, step2Loading && s.primaryBtnDisabled]}
+                style={[s.primaryBtn, (step2Loading || !homePickedColor || !awayPickedColor) && s.primaryBtnDisabled]}
                 onPress={handleFullAnalyze}
-                disabled={step2Loading}
+                disabled={step2Loading || !homePickedColor || !awayPickedColor}
               >
                 {step2Loading ? (
                   <ActivityIndicator color={Colors.bg} />
+                ) : !homePickedColor || !awayPickedColor ? (
+                  <Text style={s.primaryBtnText}>홈/어웨이 색상을 선택하세요</Text>
                 ) : (
                   <Text style={s.primaryBtnText}>전체 분석 시작</Text>
                 )}

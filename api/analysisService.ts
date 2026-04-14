@@ -70,12 +70,12 @@ export const uploadAndAnalyze = async (
   formData.append('home_roster', options.home_roster ?? '');
   formData.append('away_roster', options.away_roster ?? '');
 
-  return apiUpload('/analyze/upload', formData, onProgress, TIMEOUTS.upload);
+  return apiUpload('/api/analyze', formData, onProgress, TIMEOUTS.upload);
 };
 
 // 분석 상태 조회
 export const getAnalysisStatus = async (jobId: string): Promise<JobStatus> => {
-  return apiGet(`/status/${jobId}`);
+  return apiGet(`/api/jobs/${jobId}`);
 };
 
 // 분석 완료까지 폴링 (Promise 방식)
@@ -104,14 +104,39 @@ export const waitForAnalysis = (
   });
 };
 
-// 선수 목록 조회
+// 선수 목록 조회 (→ /metrics로 대체)
 export const getPlayers = async (videoStem: string): Promise<PlayersResponse> => {
-  return apiGet(`/players/${videoStem}`);
+  const metrics = await apiGet<any>(`/metrics/${videoStem}`);
+  return {
+    video_stem: videoStem,
+    total_tracks: (metrics as any)?.total_players || 0,
+    players: ((metrics as any)?.players || []).map((p: any) => ({
+      jersey: p.jersey || '?',
+      name: p.name,
+      detections: p.total_frames || 0,
+      teams: { [p.team]: p.total_frames },
+    })),
+  };
 };
 
-// 리포트 조회
+// 리포트 조회 (→ /metrics로 대체)
 export const getReport = async (videoStem: string): Promise<ReportResponse> => {
-  return apiGet(`/report/${videoStem}`);
+  const metrics = await apiGet<any>(`/metrics/${videoStem}`);
+  const metricsData = metrics as any;
+  return {
+    video_stem: videoStem,
+    total_players: metricsData?.total_players || 0,
+    home_players: (metricsData?.players || []).filter((p: any) => p.team === 'HOME').length,
+    away_players: (metricsData?.players || []).filter((p: any) => p.team === 'AWAY').length,
+    players: (metricsData?.players || []).map((p: any) => ({
+      jersey: p.jersey || '?',
+      team: p.team,
+      total_frames: p.total_frames || 0,
+      total_shifts: p.total_shifts || 0,
+      total_ice_time_sec: p.total_ice_time_sec || 0,
+      total_ice_time_min: p.total_ice_time_min || 0,
+    })),
+  };
 };
 
 // ─── 3단계 분석 플로우 ───────────────────────────────────────────────
