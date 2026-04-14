@@ -258,7 +258,9 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
       } catch {}
       setPrescanLoading(false);
     } catch (e: any) {
-      Alert.alert('분석 오류', e.message ?? '업로드 또는 분석에 실패했습니다.');
+      const errorMsg = e.message || JSON.stringify(e);
+      console.error('[Step 1] 분석 오류:', errorMsg);
+      Alert.alert('분석 오류', errorMsg);
     } finally {
       setStep1Loading(false);
     }
@@ -324,7 +326,9 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
       setStep(3);
       startPollingStep3(result.job_id);
     } catch (e: any) {
-      Alert.alert('분석 오류', e.message ?? '전체 분석 시작에 실패했습니다.');
+      const errorMsg = e.message || JSON.stringify(e);
+      console.error('[Step 2] 분석 오류:', errorMsg);
+      Alert.alert('분석 오류', errorMsg);
     } finally {
       setStep2Loading(false);
     }
@@ -348,8 +352,10 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
           clearInterval(pollRef.current!);
           setStatusMsg(`오류: ${s.message}`);
         }
-      } catch {
-        // 무시
+      } catch (e: any) {
+        const errorMsg = e.message || JSON.stringify(e);
+        console.error('[Step 3 폴링] 오류:', errorMsg);
+        setStatusMsg(`폴링 오류: ${errorMsg}`);
       }
     }, POLL_INTERVAL);
   };
