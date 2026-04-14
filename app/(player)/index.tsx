@@ -13,22 +13,22 @@ import PlayerTracker, { TeamRosterList } from '../../components/PlayerTracker';
 import { RinkSVG } from '../../components/TacticsAnimator';
 import { getAllTracks, getAllPlayersAtTime } from '../../api/trackingService';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadAndAnalyze, waitForAnalysis, getPlayers, getReport } from '../../api/analysisService';
+import { uploadAndAnalyze, waitForAnalysis, getPlayers, getReport, getShifts } from '../../api/analysisService';
 import { generateHighlight, getVideoStreamUrl } from '../../api/highlightService';
-import { apiPost, apiGet } from '../../api/client';
 import { API_BASE_URL } from '../../api/config';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { useAuth } from '../../contexts/AuthContext';
 import { addGame, getGames, updateGame, deleteGame, type GameRecord } from '../../api/gamesService';
 import BenchSetupScreen, { BenchConfig } from '../../components/BenchSetupScreen';
 import HeatmapView from '../../components/HeatmapView';
+import { getHeatmapImageUrl } from '../../api/heatmapService';
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-type ViewMode = 'video' | 'diagram' | 'heatmap';
+type ViewMode = 'video' | 'diagram';
 type LabelFilter = 'ALL' | 'HOME' | 'AWAY' | 'OFF';
 
 type AppStep = 'input' | 'analyzing' | 'select_player' | 'select_option';
-type VideoType = 'highlight' | 'fulltime' | 'shifts';
+type VideoType = 'highlight' | 'fulltime' | 'shifts' | 'heatmap';
 type TeamFilter = 'ALL' | 'HOME' | 'AWAY';
 
 interface PlayerStats {
@@ -86,7 +86,7 @@ export default function PlayerAnalysisScreen() {
   const [selectedPlayer, setSelectedPlayer] = useState<PlayerStats | null>(null);
 
   // 옵션
-  const [videoType, setVideoType] = useState<VideoType>('highlight');
+  const [videoType, setVideoType] = useState<VideoType>('heatmap');
   const [shifts, setShifts] = useState<ShiftItem[]>([]);
   const [loadingShifts, setLoadingShifts] = useState(false);
   const [generatingHL, setGeneratingHL] = useState(false);
@@ -157,59 +157,33 @@ export default function PlayerAnalysisScreen() {
   // 분석 시작
   const startAnalysis = async (homeR?: string, awayR?: string, benchCfg?: BenchConfig | null) => {
     const input = url.trim();
-    if (!input) { Alert.alert('오류', 'YouTube URL 또는 영상을 선택해주세요'); return; }
+    if (!input) { Alert.alert('오류', '영상을 선택해주세요'); return; }
 
     const finalHomeRoster = homeR ?? homeRoster;
     const finalAwayRoster = awayR ?? awayRoster;
 
     setStep('analyzing');
     animateProgress(5);
-    setProgressMsg('분석 요청 중...');
+    setProgressMsg('영상 업로드 중...');
 
     try {
-      let job_id: string, stem: string, vpath: string = '';
+      let job_id: string, stem: string;
 
-      const isYouTube = input.includes('youtube.com') || input.includes('youtu.be');
-      const isFile = input.startsWith('file://') || input.startsWith('/');
-
-      if (isYouTube) {
-        setProgressMsg('YouTube 영상 다운로드 중...');
-        animateProgress(10);
-        const res = await apiPost<{ job_id: string; video_stem: string }>('/analyze/url', {
-          youtube_url: input, fps: 4,
-          home_roster: finalHomeRoster,
-          away_roster: finalAwayRoster,
-          home_jersey_hex: homeJerseyHex ?? '',
-          away_jersey_hex: awayJerseyHex ?? '',
-          bench_config: benchCfg ?? null,
-        });
-        job_id = res.job_id; stem = res.video_stem;
-      } else if (isFile) {
-        setProgressMsg('영상 업로드 중...');
-        animateProgress(10);
-        const filename = input.split('/').pop() || 'video.mp4';
-        const res = await uploadAndAnalyze(input, filename, { fps: 4, home_roster: finalHomeRoster, away_roster: finalAwayRoster });
-        job_id = res.job_id; stem = res.video_stem;
-        vpath = input;
-      } else {
-        // 경로 기반 (서버에 있는 영상)
-        const res = await apiPost<{ job_id: string; video_stem: string }>('/analyze', {
-          video_path: input, fps: 4,
-        });
-        job_id = res.job_id; stem = res.video_stem;
-        vpath = input;
-      }
+      animateProgress(10);
+      const filename = input.split('/').pop() || 'video.mp4';
+      const res = await uploadAndAnalyze(input, filename, {
+        fps: 4, home_roster: finalHomeRoster, away_roster: finalAwayRoster,
+      });
+      job_id = res.job_id;
+      stem = res.video_stem;
 
       setVideoStem(stem);
-      // YouTube: 서버에 다운된 실제 경로 사용
-      const serverVideoPath = vpath || `/root/iceiq/videos/${stem}/${stem}.mp4`;
-      setVideoPath(serverVideoPath);
+      setVideoPath(input);
       // Firestore에 게임 저장
       if (user?.uid) {
         const gid = await addGame(user.uid, {
           videoStem: stem,
-          title: input.includes('youtube') ? `YouTube - ${stem}` : stem,
-          youtubeUrl: input.includes('youtube') ? input : undefined,
+          title: filename.replace(/\.[^.]+$/, ''),
           status: 'analyzing',
         });
         setCurrentGameId(gid);
@@ -274,18 +248,34 @@ export default function PlayerAnalysisScreen() {
     }
   };
 
-  const loadShifts = () => {
-    if (!videoStem || !selectedPlayer) return;
+  const loadShifts = async () => {
+    if (!selectedPlayer || !videoStem) return;
     setLoadingShifts(true);
-    apiGet<{ shifts: ShiftItem[]; total_shifts: number; total_ice_time_sec: number }>(
-      `/shifts/${videoStem}/${selectedPlayer.jersey}`
-    ).then(res => {
-      setShifts(res.shifts ?? []);
-    }).catch(() => {
-      setShifts([]);
-    }).finally(() => {
+    try {
+      const data = await getShifts(videoStem, selectedPlayer.jersey);
+      setShifts(data.shifts.map((s, i) => ({
+        shift_number: s.shift_number ?? i + 1,
+        start_time: s.start_time,
+        end_time: s.end_time,
+        duration: s.duration,
+      })));
+    } catch (e: any) {
+      // API 실패 시 하이라이트에서 시프트 추출 시도
+      try {
+        const hl = await generateHighlight(videoPath, videoStem, selectedPlayer.jersey, { gap: 30, buf: 0 });
+        setShifts((hl.shift_detail ?? []).map((s, i) => ({
+          shift_number: i + 1,
+          start_time: s.start,
+          end_time: s.end,
+          duration: s.duration,
+        })));
+      } catch {
+        Alert.alert('오류', '시프트 데이터를 불러올 수 없습니다');
+        setShifts([]);
+      }
+    } finally {
       setLoadingShifts(false);
-    });
+    }
   };
 
   const handlePlay = async () => {
@@ -494,23 +484,11 @@ export default function PlayerAnalysisScreen() {
         </View>
 
         <View style={s.card}>
-          <Text style={s.cardTitle}>📎 YouTube URL</Text>
-          <TextInput
-            style={s.input} value={url}
-            onChangeText={(text) => {
-              setUrl(text);
-              const m = text.match(/(?:v=|youtu\.be\/|live\/|shorts\/)([A-Za-z0-9_-]{11})/);
-              if (m) setVideoStem(m[1]);
-            }}
-            placeholder="https://youtube.com/watch?v=..."
-            placeholderTextColor={Colors.subtext}
-            autoCapitalize="none" autoCorrect={false}
-          />
-          <View style={s.divRow}>
-            <View style={s.divLine} /><Text style={s.divText}>또는</Text><View style={s.divLine} />
-          </View>
-          <Pressable style={s.fileBtn} onPress={pickVideo}>
-            <Text style={s.fileBtnText}>📁 갤러리에서 영상 선택</Text>
+          <Text style={s.cardTitle}>📹 경기 영상</Text>
+          <Pressable style={[s.fileBtn, url ? { borderColor: Colors.accent } : {}]} onPress={pickVideo}>
+            <Text style={[s.fileBtnText, url ? { color: Colors.accent } : {}]}>
+              {url ? `✅ ${url.split('/').pop()}` : '📁 갤러리에서 영상 선택'}
+            </Text>
           </Pressable>
         </View>
 
@@ -729,12 +707,6 @@ export default function PlayerAnalysisScreen() {
               >
                 <Text style={{ color: viewMode === 'diagram' ? '#000' : '#888', fontSize: 12, fontWeight: '700' }}>🗺 Diagram</Text>
               </Pressable>
-              <Pressable
-                style={{ paddingHorizontal: 10, paddingVertical: 6, backgroundColor: viewMode === 'heatmap' ? Colors.accent : 'transparent' }}
-                onPress={() => setViewMode('heatmap')}
-              >
-                <Text style={{ color: viewMode === 'heatmap' ? '#000' : '#888', fontSize: 12, fontWeight: '700' }}>🔥 Heatmap</Text>
-              </Pressable>
             </View>
           )}
           <Pressable onPress={() => setShowPlayer(false)} style={{ padding: 8 }}>
@@ -789,14 +761,6 @@ export default function PlayerAnalysisScreen() {
                 </View>
               )}
             </>
-          ) : viewMode === 'heatmap' ? (
-            /* ── HEATMAP VIEW ── */
-            <View style={{ flex: 1, backgroundColor: '#020617' }}>
-              <HeatmapView
-                videoStem={videoStem ?? ''}
-                initialJersey={selectedPlayer?.jersey}
-              />
-            </View>
           ) : (
             /* ── DIAGRAM VIEW ── */
             <View style={{ flex: 1, backgroundColor: '#0D1B2A', position: 'relative' }}>
@@ -879,9 +843,10 @@ export default function PlayerAnalysisScreen() {
       </View>
 
       {/* 타입 선택 */}
-      <Text style={s.sectionLabel}>영상 타입</Text>
+      <Text style={s.sectionLabel}>분석 보기</Text>
       <View style={s.optionList}>
         {[
+          { type: 'heatmap' as VideoType, icon: '🗺️', label: 'Heatmap', desc: '빙판 위치 히트맵' },
           { type: 'highlight' as VideoType, icon: '🎬', label: 'Highlight Clips', desc: '감지 구간 클립' },
           { type: 'fulltime' as VideoType, icon: '🏒', label: 'Fulltime Video', desc: '첫~마지막 등장 전체' },
           { type: 'shifts' as VideoType, icon: '📋', label: 'Ice Time Shifts', desc: '시프트별 타임스탬프' },
@@ -898,8 +863,20 @@ export default function PlayerAnalysisScreen() {
         ))}
       </View>
 
+      {/* 히트맵 */}
+      {videoType === 'heatmap' && selectedPlayer && (
+        <View style={{ marginTop: 16 }}>
+          <HeatmapView
+            videoStem={videoStem}
+            jersey={selectedPlayer.jersey}
+            name={selectedPlayer.name}
+            team={selectedPlayer.team as 'HOME' | 'AWAY'}
+          />
+        </View>
+      )}
+
       {/* 재생/생성 버튼 */}
-      {videoType !== 'shifts' && (
+      {(videoType === 'highlight' || videoType === 'fulltime') && (
         <Pressable style={s.playBtn} onPress={handlePlay} disabled={generatingHL}>
           {generatingHL ? <ActivityIndicator color={Colors.bg} /> :
             <Text style={s.playBtnText}>{videoType==='highlight' ? '🎬 하이라이트 생성' : '🏒 풀타임 생성'}</Text>}
@@ -935,6 +912,31 @@ export default function PlayerAnalysisScreen() {
           )}
         </View>
       )}
+
+      {/* 성장 & 스카우팅 바로가기 */}
+      <View style={{ flexDirection: 'row', gap: 10, marginTop: 20 }}>
+        <Pressable
+          style={{ flex: 1, backgroundColor: Colors.surfaceLow, borderRadius: 8, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: Colors.success + '44' }}
+          onPress={() => router.push('/(player)/growth')}
+        >
+          <Text style={{ fontSize: 22 }}>📈</Text>
+          <View>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.text }}>성장 추적</Text>
+            <Text style={{ fontSize: 10, color: Colors.subtext }}>트렌드 & AI 훈련</Text>
+          </View>
+        </Pressable>
+        <Pressable
+          style={{ flex: 1, backgroundColor: Colors.surfaceLow, borderRadius: 8, padding: 14, flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderColor: Colors.accent + '44' }}
+          onPress={() => router.push('/(player)/scouting')}
+        >
+          <Text style={{ fontSize: 22 }}>🔍</Text>
+          <View>
+            <Text style={{ fontSize: 13, fontWeight: '700', color: Colors.text }}>스카우팅</Text>
+            <Text style={{ fontSize: 10, color: Colors.subtext }}>상대 분석 & 전략</Text>
+          </View>
+        </Pressable>
+      </View>
+
       <View style={{ height: 40 }} />
     </ScrollView>
     </>
