@@ -18,10 +18,7 @@ export default function TabsLayout() {
   const isPlayer = userRole === 'player';
   const isCoach  = userRole === 'coach';
   const isTeam   = userRole === 'team';
-  const hasRole  = isPlayer || isCoach || isTeam;
 
-  // lessons: shown for all roles, hidden for default (no role)
-  const lessonsHidden = !hasRole;
   // stats: shown only for player
   const statsHidden = !isPlayer;
   // analysis: shown for coach and default; hidden for player and team
@@ -59,18 +56,11 @@ export default function TabsLayout() {
       />
       <Tabs.Screen
         name="lessons"
-        options={{
-          href: lessonsHidden ? null : undefined,
-          title: '레슨',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="🎬" focused={focused} />,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="learn"
-        options={{
-          title: '학습',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="📚" focused={focused} />,
-        }}
+        options={{ href: null }}
       />
       <Tabs.Screen
         name="analysis"
@@ -94,22 +84,6 @@ export default function TabsLayout() {
           href: teamTabHidden ? null : undefined,
           title: '팀',
           tabBarIcon: ({ focused }) => <TabIcon emoji="🏟️" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="scouting"
-        options={{
-          href: isPlayer ? undefined : null,
-          title: '스카우팅',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="🎯" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="growth"
-        options={{
-          href: isPlayer ? undefined : null,
-          title: '성장',
-          tabBarIcon: ({ focused }) => <TabIcon emoji="📈" focused={focused} />,
         }}
       />
       <Tabs.Screen
