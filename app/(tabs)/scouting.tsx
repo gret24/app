@@ -1,248 +1,279 @@
 /**
  * IceIQ — Scouting Report Screen
- * Kinetic Edge Design System
+ * Kinetic Edge Design System v2
+ * Based on "Scouting Report" design reference
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  ActivityIndicator, Alert,
+  ActivityIndicator, Dimensions, FlatList,
 } from 'react-native';
 import { Colors, Spacing, Radius, Fonts } from '../../constants/Colors';
 import { LinearGradient } from 'expo-linear-gradient';
 
+const { width: SCREEN_W } = Dimensions.get('window');
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-interface Weakness {
+interface Lineup {
+  line: string;
   type: string;
-  description: string;
-  severity: 'high' | 'medium' | 'low';
+  typeColor: string;
+  players: { jersey: string; name: string; pos: string }[];
 }
 
-interface Recommendation {
-  priority: number;
-  phase: string;
-  tactic: string;
+interface PlayerMission {
+  jersey: string;
+  name: string;
+  role: string;
+  roleColor: string;
+  metric: string;
+  metricValue: string;
   description: string;
-  key_players: string[];
+  accentColor: string;
 }
 
-interface ScoutingReport {
-  opponent_name: string;
-  generated_at: string;
-  opponent_summary: {
-    primary_formation: string;
-    forecheck_intensity_pct: number;
-    breakout_frequency_pct: number;
-    transition_rate_pct: number;
-    weaknesses: Weakness[];
-    weaknesses_count: number;
-  };
-  strategy: {
-    overall_trend?: string;
-    matchup_advantage: {
-      overall: string;
-      exploitable_weaknesses: number;
-      our_avg_speed_kmh: number;
-      notes: string;
-    };
-    recommendations: Recommendation[];
-  };
-  report: {
-    generated_by: string;
-    ai_analysis?: string;
-    summary?: string;
-    coaching_notes?: string[];
-  };
+interface ScoutingData {
+  opponentName: string;
+  system: string;
+  systemNote: string;
+  // Rink zones
+  deficitZone: string;
+  vulnerability: string;
+  defensiveGap: string;
+  // Lineups
+  lineups: Lineup[];
+  // Missions
+  missions: PlayerMission[];
 }
 
 // ─── Mock data ────────────────────────────────────────────────────────────────
 
-const MOCK_REPORT: ScoutingReport = {
-  opponent_name: 'Lopez',
-  generated_at: new Date().toISOString(),
-  opponent_summary: {
-    primary_formation: 'UNKNOWN',
-    forecheck_intensity_pct: 12,
-    breakout_frequency_pct: 35,
-    transition_rate_pct: 42,
-    weaknesses_count: 2,
-    weaknesses: [
-      { type: 'passive_forecheck', description: '포체킹이 소극적 — 뉴트럴존에서 빠른 전환 공략 가능', severity: 'high' },
-      { type: 'breakout_dependent', description: '브레이크아웃 의존도 높음 — 포체킹으로 턴오버 유도', severity: 'high' },
-    ],
-  },
-  strategy: {
-    matchup_advantage: {
-      overall: '높음',
-      exploitable_weaknesses: 2,
-      our_avg_speed_kmh: 6.2,
-      notes: '상대 고위험 약점 2개, 중위험 0개 발견',
+const MOCK: ScoutingData = {
+  opponentName: 'Shadow Wolves',
+  system: '1-2-2 SYSTEM',
+  systemNote: 'High Forecheck Tactical',
+  deficitZone: 'ZONE 3 DEFICIT',
+  vulnerability: 'VULNERABILITY DETECTED',
+  defensiveGap: 'Defensive Gaps: Neutral Zone Left',
+  lineups: [
+    {
+      line: 'LINE 1', type: 'OFFENSIVE', typeColor: Colors.accent,
+      players: [
+        { jersey: '#19', name: 'Smith', pos: 'C' },
+        { jersey: '#88', name: 'Kane', pos: 'LW' },
+        { jersey: '#10', name: 'Miller', pos: 'RW' },
+      ],
     },
-    recommendations: [
-      {
-        priority: 1, phase: '공격', tactic: '적극적 포체킹',
-        description: '1-2-2 포체킹으로 상대 브레이크아웃을 차단하세요.',
-        key_players: ['#28', '#11'],
-      },
-      {
-        priority: 1, phase: '수비', tactic: '브레이크아웃 차단',
-        description: '뉴트럴존 트랩으로 턴오버를 유도하세요.',
-        key_players: ['#47', '#36'],
-      },
-    ],
-  },
-  report: {
-    generated_by: 'claude-haiku-4-5',
-    ai_analysis: `Lopez는 수비적으로 소극적인 팀입니다. 포체킹 강도 12%로 매우 낮아 뉴트럴존에서의 빠른 전환 기회가 풍부하며, 브레이크아웃 의존도(35%)가 높아 우리의 체계적인 압박으로 턴오버 유도가 가능합니다.
-
-[공격] 1-2-2 포체킹 시스템: #28, #11을 전방 배치, 상대 브레이크아웃 원천 차단
-[수비] 뉴트럴존 트랩: NZ 진입 시 2-3명 즉각 응축, 턴오버 유도
-[포지션] 슬롯 점유 유지: #61, #25 slot_presence 활용, 상대 DZ 체류 제약
-
-주의: 포체킹 과몰입 시 배후 공간 노출 위험 → 항상 2명 커버 유지`,
-  },
+    {
+      line: 'LINE 2', type: 'BALANCED', typeColor: Colors.secondary,
+      players: [
+        { jersey: '#42', name: 'Thompson', pos: 'C' },
+        { jersey: '#07', name: 'Park', pos: 'LW' },
+        { jersey: '#22', name: 'Kim', pos: 'RW' },
+      ],
+    },
+    {
+      line: 'LINE 3', type: 'CHECKING', typeColor: Colors.outline,
+      players: [
+        { jersey: '#15', name: 'Davies', pos: 'C' },
+        { jersey: '#33', name: 'Larsen', pos: 'LW' },
+        { jersey: '#56', name: 'Zito', pos: 'RW' },
+      ],
+    },
+  ],
+  missions: [
+    {
+      jersey: '#7', name: 'Park, Jae-Ho', role: 'HIGH PRESS PRIORITY', roleColor: Colors.accent,
+      metric: 'SUCCESS RATE', metricValue: '82%', accentColor: Colors.accent,
+      description: "Target Shadow Wolves' defensemen in the primary breakout lane. Force turnovers early in the transition phase.",
+    },
+    {
+      jersey: '#22', name: 'Kim, Sung-Min', role: 'NEUTRAL ZONE TRAP', roleColor: Colors.accentDim,
+      metric: 'ENGAGEMENT', metricValue: 'High', accentColor: Colors.accentLight,
+      description: 'Lock the center channel during opposition power plays. Redirect flow to the boards where defensive gaps are minimal.',
+    },
+    {
+      jersey: '#88', name: 'Kane, Patrick', role: 'SLOT PENETRATION', roleColor: Colors.outline,
+      metric: 'GOAL THREAT', metricValue: 'Elite', accentColor: Colors.cardHighest,
+      description: 'Drive hard to the slot on every power play entry. Create screens and deflection opportunities in front of the net.',
+    },
+  ],
 };
 
-// ─── Sub-components ───────────────────────────────────────────────────────────
+// ─── Rink Visualization ───────────────────────────────────────────────────────
 
-function StatPill({ label, value, unit }: { label: string; value: number; unit: string }) {
+function RinkViz() {
   return (
-    <View style={styles.statPill}>
-      <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}<Text style={styles.statUnit}>{unit}</Text></Text>
-    </View>
-  );
-}
-
-function WeaknessRow({ w }: { w: Weakness }) {
-  const isHigh = w.severity === 'high';
-  return (
-    <View style={styles.weaknessRow}>
-      <View style={[styles.severityDot, { backgroundColor: isHigh ? Colors.error : Colors.warning }]} />
-      <Text style={styles.weaknessText}>{w.description}</Text>
-    </View>
-  );
-}
-
-function RecommendationCard({ rec }: { rec: Recommendation }) {
-  return (
-    <View style={styles.recCard}>
-      <View style={styles.recHeader}>
-        <View style={styles.recPhaseChip}>
-          <Text style={styles.recPhaseText}>{rec.phase}</Text>
+    <View style={rinkStyles.container}>
+      {/* Rink border */}
+      <View style={rinkStyles.rink}>
+        {/* Center line */}
+        <View style={rinkStyles.centerLine} />
+        {/* Center circle */}
+        <View style={rinkStyles.centerCircle} />
+        {/* Zone labels */}
+        <View style={[rinkStyles.zoneLabel, { top: 12, left: 12 }]}>
+          <Text style={rinkStyles.zoneLabelText}>ZONE 3 DEFICIT</Text>
         </View>
-        <Text style={styles.recTactic}>{rec.tactic}</Text>
+        <View style={[rinkStyles.vulnLabel, { top: 12, right: 12 }]}>
+          <Text style={[rinkStyles.zoneLabelText, { color: Colors.error }]}>VULNERABILITY</Text>
+        </View>
+        {/* Vulnerability blobs */}
+        <View style={[rinkStyles.blob, { top: '25%' as any, left: '20%' as any, width: 60, height: 60, backgroundColor: Colors.error + '55' }]} />
+        <View style={[rinkStyles.blob, { bottom: '30%' as any, right: '20%' as any, width: 72, height: 72, backgroundColor: Colors.error + '66' }]} />
+        <View style={[rinkStyles.blob, { top: '50%' as any, right: '12%' as any, width: 44, height: 44, backgroundColor: Colors.error + '33' }]} />
+        {/* Bottom label */}
+        <View style={rinkStyles.bottomLabel}>
+          <Text style={rinkStyles.bottomLabelText}>{MOCK.defensiveGap}</Text>
+        </View>
       </View>
-      <Text style={styles.recDesc}>{rec.description}</Text>
-      {rec.key_players.length > 0 && (
-        <View style={styles.recPlayers}>
-          {rec.key_players.map((p, i) => (
-            <View key={i} style={styles.playerChip}>
-              <Text style={styles.playerChipText}>{p}</Text>
-            </View>
-          ))}
-        </View>
-      )}
     </View>
   );
 }
+
+const rinkStyles = StyleSheet.create({
+  container: { paddingHorizontal: Spacing.lg },
+  rink: {
+    width: '100%', aspectRatio: 4 / 3,
+    backgroundColor: Colors.surfaceLow, borderRadius: Radius.lg,
+    borderWidth: 2, borderColor: Colors.outlineVariant + '33',
+    overflow: 'hidden', position: 'relative',
+  },
+  centerLine: { position: 'absolute', top: 0, bottom: 0, left: '50%', width: 1, backgroundColor: Colors.outlineVariant + '55' },
+  centerCircle: { position: 'absolute', width: 80, height: 80, borderRadius: 40, borderWidth: 1, borderColor: Colors.outlineVariant + '44', top: '50%', left: '50%', marginTop: -40, marginLeft: -40 },
+  zoneLabel: { position: 'absolute', backgroundColor: Colors.cardHighest + 'CC', borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 4 },
+  vulnLabel: { position: 'absolute', backgroundColor: Colors.errorContainer + 'CC', borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 4 },
+  zoneLabelText: { fontFamily: Fonts.headline, fontSize: 8, letterSpacing: 1.5, color: Colors.accentDim, textTransform: 'uppercase' },
+  blob: { position: 'absolute', borderRadius: 999 },
+  bottomLabel: { position: 'absolute', bottom: 16, left: 0, right: 0, alignItems: 'center' },
+  bottomLabelText: { fontFamily: Fonts.body, fontSize: 11, color: Colors.subtext, backgroundColor: Colors.bg + 'CC', paddingHorizontal: 12, paddingVertical: 4, borderRadius: Radius.md, borderWidth: 1, borderColor: Colors.outlineVariant + '22' },
+});
+
+// ─── Lineup Card ──────────────────────────────────────────────────────────────
+
+function LineupCard({ lineup }: { lineup: Lineup }) {
+  const isFirst = lineup.line === 'LINE 1';
+  return (
+    <View style={[lineupStyles.card, isFirst && lineupStyles.cardActive]}>
+      <View style={lineupStyles.header}>
+        <Text style={[lineupStyles.lineNum, isFirst && { color: Colors.accentDim }]}>{lineup.line}</Text>
+        <View style={[lineupStyles.typeBadge, { backgroundColor: lineup.typeColor + '22' }]}>
+          <Text style={[lineupStyles.typeText, { color: lineup.typeColor }]}>{lineup.type}</Text>
+        </View>
+      </View>
+      {lineup.players.map((p, i) => (
+        <View key={i} style={lineupStyles.playerRow}>
+          <View style={[lineupStyles.jerseyBox, isFirst && { backgroundColor: Colors.accentGlow }]}>
+            <Text style={[lineupStyles.jersey, isFirst && { color: Colors.accent }]}>{p.jersey}</Text>
+          </View>
+          <Text style={lineupStyles.playerName}>{p.name}</Text>
+          <Text style={lineupStyles.pos}>{p.pos}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const lineupStyles = StyleSheet.create({
+  card: { width: 220, backgroundColor: Colors.surfaceLow, borderRadius: Radius.lg, padding: Spacing.lg, marginRight: Spacing.md, borderTopWidth: 1, borderTopColor: Colors.outlineVariant + '22' },
+  cardActive: { borderTopColor: Colors.accent + '55' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: Spacing.lg },
+  lineNum: { fontFamily: Fonts.headlineBold, fontSize: 22, color: Colors.subtext, fontStyle: 'italic' },
+  typeBadge: { borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 2 },
+  typeText: { fontFamily: Fonts.body, fontSize: 9, letterSpacing: 1, textTransform: 'uppercase', fontWeight: '700' },
+  playerRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.sm },
+  jerseyBox: { width: 32, height: 32, borderRadius: Radius.md, backgroundColor: Colors.cardHighest, alignItems: 'center', justifyContent: 'center' },
+  jersey: { fontFamily: Fonts.headlineBold, fontSize: 11, color: Colors.text },
+  playerName: { fontFamily: Fonts.body, fontSize: 13, color: Colors.text, flex: 1 },
+  pos: { fontFamily: Fonts.body, fontSize: 10, color: Colors.outline },
+});
+
+// ─── Mission Card ─────────────────────────────────────────────────────────────
+
+function MissionCard({ m }: { m: PlayerMission }) {
+  return (
+    <View style={missionStyles.card}>
+      {/* Accent bar */}
+      <View style={[missionStyles.accentBar, { backgroundColor: m.accentColor }]} />
+      <View style={missionStyles.top}>
+        <View style={missionStyles.avatar}>
+          <Text style={{ fontSize: 28 }}>🏒</Text>
+          <View style={[missionStyles.jerseyBadge, { backgroundColor: m.accentColor }]}>
+            <Text style={missionStyles.jerseyText}>{m.jersey}</Text>
+          </View>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={missionStyles.name}>{m.name}</Text>
+          <Text style={[missionStyles.role, { color: m.roleColor }]}>{m.role}</Text>
+        </View>
+        <View style={{ alignItems: 'flex-end' }}>
+          <Text style={missionStyles.metricLabel}>{m.metric}</Text>
+          <Text style={missionStyles.metricValue}>{m.metricValue}</Text>
+        </View>
+      </View>
+      <View style={missionStyles.divider} />
+      <Text style={missionStyles.desc}>{m.description}</Text>
+    </View>
+  );
+}
+
+const missionStyles = StyleSheet.create({
+  card: { backgroundColor: Colors.surfaceLow, borderRadius: Radius.lg, padding: Spacing.lg, marginBottom: Spacing.md, overflow: 'hidden', position: 'relative' },
+  accentBar: { position: 'absolute', top: 0, right: 0, bottom: 0, width: 3 },
+  top: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md },
+  avatar: { width: 48, height: 48, backgroundColor: Colors.cardHighest, borderRadius: Radius.md, alignItems: 'center', justifyContent: 'center', position: 'relative' },
+  jerseyBadge: { position: 'absolute', bottom: -4, right: -4, borderRadius: Radius.sm, paddingHorizontal: 4, paddingVertical: 1 },
+  jerseyText: { fontFamily: Fonts.headlineBold, fontSize: 8, color: Colors.bg },
+  name: { fontFamily: Fonts.bodyBold, fontSize: 13, color: Colors.text },
+  role: { fontFamily: Fonts.body, fontSize: 9, letterSpacing: 1.5, textTransform: 'uppercase', marginTop: 1 },
+  metricLabel: { fontFamily: Fonts.body, fontSize: 8, color: Colors.outline, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 2 },
+  metricValue: { fontFamily: Fonts.headlineBold, fontSize: 16, color: Colors.text },
+  divider: { height: 1, backgroundColor: Colors.outlineVariant + '22', marginVertical: Spacing.md },
+  desc: { fontFamily: Fonts.body, fontSize: 12, color: Colors.subtext, lineHeight: 18 },
+});
 
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function ScoutingScreen() {
-  const [report, setReport] = useState<ScoutingReport | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    // TODO: 실제 API — fetch('/api/scouting?opponent=Lopez')
-    setTimeout(() => {
-      setReport(MOCK_REPORT);
-      setLoading(false);
-    }, 800);
-  }, []);
-
-  if (loading) {
-    return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator color={Colors.accent} size="large" />
-        <Text style={styles.loadingText}>스카우팅 리포트 생성 중...</Text>
-      </View>
-    );
-  }
-  if (!report) return null;
-
-  const adv = report.strategy.matchup_advantage;
-  const advColor = adv.overall === '높음' ? Colors.success : adv.overall === '보통' ? Colors.warning : Colors.error;
+  const [data] = useState<ScoutingData>(MOCK);
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
-      {/* ── Header ── */}
+
+      {/* ── Opponent Header ── */}
       <View style={styles.header}>
-        <Text style={styles.headerMeta}>SCOUTING REPORT</Text>
-        <Text style={styles.headerTitle}>vs. {report.opponent_name}</Text>
-        <Text style={styles.headerDate}>{new Date(report.generated_at).toLocaleDateString('ko-KR')}</Text>
+        <View style={styles.headerLeft}>
+          <Text style={styles.headerMeta}>UPCOMING MATCHUP</Text>
+          <Text style={styles.headerTitle}>{data.opponentName}</Text>
+        </View>
+        <View style={styles.systemBadge}>
+          <Text style={styles.systemText}>{data.system}</Text>
+          <Text style={styles.systemNote}>{data.systemNote}</Text>
+        </View>
       </View>
 
-      {/* ── Matchup Advantage Card ── */}
-      <LinearGradient
-        colors={['rgba(0,212,255,0.18)', 'rgba(0,212,255,0.04)']}
-        start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-        style={styles.advantageCard}
+      {/* ── Rink Heatmap ── */}
+      <RinkViz />
+
+      {/* ── Recommended Lineups ── */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Recommended Lineups</Text>
+        <Text style={styles.sectionBadge}>OPTIMIZED</Text>
+      </View>
+      <ScrollView
+        horizontal showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.lineupScroll}
+        snapToInterval={236} decelerationRate="fast"
       >
-        <View>
-          <Text style={styles.advantageLabel}>MATCHUP ADVANTAGE</Text>
-          <Text style={[styles.advantageValue, { color: advColor }]}>{adv.overall}</Text>
-          <Text style={styles.advantageNote}>{adv.notes}</Text>
-        </View>
-        <View style={styles.advantageRight}>
-          <Text style={styles.advantageSpeedLabel}>우리 팀 평균</Text>
-          <Text style={styles.advantageSpeed}>{adv.our_avg_speed_kmh}</Text>
-          <Text style={styles.advantageSpeedUnit}>km/h</Text>
-        </View>
-      </LinearGradient>
+        {data.lineups.map((l, i) => <LineupCard key={i} lineup={l} />)}
+      </ScrollView>
 
-      {/* ── Opponent Stats ── */}
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>상대팀 분석</Text>
-        <View style={styles.statRow}>
-          <StatPill label="포체킹" value={report.opponent_summary.forecheck_intensity_pct} unit="%" />
-          <StatPill label="브레이크아웃" value={report.opponent_summary.breakout_frequency_pct} unit="%" />
-          <StatPill label="전환률" value={report.opponent_summary.transition_rate_pct} unit="%" />
-        </View>
-        <View style={styles.formationRow}>
-          <Text style={styles.formationLabel}>주 포메이션</Text>
-          <Text style={styles.formationValue}>{report.opponent_summary.primary_formation}</Text>
-        </View>
+      {/* ── Player Missions ── */}
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>Key Player Missions</Text>
       </View>
-
-      {/* ── Weaknesses ── */}
-      {report.opponent_summary.weaknesses.length > 0 && (
-        <View style={styles.sectionCard}>
-          <Text style={styles.sectionTitle}>약점 {report.opponent_summary.weaknesses_count}개</Text>
-          {report.opponent_summary.weaknesses.map((w, i) => (
-            <WeaknessRow key={i} w={w} />
-          ))}
-        </View>
-      )}
-
-      {/* ── Recommendations ── */}
-      <View style={styles.sectionCard}>
-        <Text style={styles.sectionTitle}>전략 권고</Text>
-        {report.strategy.recommendations.map((rec, i) => (
-          <RecommendationCard key={i} rec={rec} />
-        ))}
-      </View>
-
-      {/* ── AI Analysis ── */}
-      {report.report.ai_analysis && (
-        <View style={styles.aiCard}>
-          <View style={styles.aiHeader}>
-            <View style={styles.aiDot} />
-            <Text style={styles.aiLabel}>AI 코칭 분석 · {report.report.generated_by}</Text>
-          </View>
-          <Text style={styles.aiText}>{report.report.ai_analysis}</Text>
-        </View>
-      )}
+      {data.missions.map((m, i) => <MissionCard key={i} m={m} />)}
 
       <View style={{ height: 32 }} />
     </ScrollView>
@@ -253,61 +284,19 @@ export default function ScoutingScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.bg },
-  content: { paddingHorizontal: Spacing.lg, paddingTop: 56, paddingBottom: 24 },
-  loadingContainer: { flex: 1, backgroundColor: Colors.bg, alignItems: 'center', justifyContent: 'center', gap: 16 },
-  loadingText: { color: Colors.subtext, fontFamily: Fonts.body, fontSize: 14 },
+  content: { paddingTop: 56, paddingBottom: 24, gap: Spacing.xl },
 
-  header: { marginBottom: Spacing.xl },
-  headerMeta: { fontFamily: Fonts.body, fontSize: 10, letterSpacing: 3, color: Colors.outline, textTransform: 'uppercase', marginBottom: 4 },
-  headerTitle: { fontFamily: Fonts.headlineBold, fontSize: 28, color: Colors.text, marginBottom: 2 },
-  headerDate: { fontFamily: Fonts.body, fontSize: 12, color: Colors.outline },
+  header: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: Spacing.lg },
+  headerLeft: { gap: 2 },
+  headerMeta: { fontFamily: Fonts.headline, fontSize: 9, letterSpacing: 3, color: Colors.outline, textTransform: 'uppercase' },
+  headerTitle: { fontFamily: Fonts.headlineBold, fontSize: 32, color: Colors.text, letterSpacing: -1 },
+  systemBadge: { backgroundColor: Colors.cardHighest, borderRadius: Radius.sm, paddingHorizontal: 10, paddingVertical: 6, borderLeftWidth: 2, borderLeftColor: Colors.accent, alignItems: 'flex-end', gap: 2 },
+  systemText: { fontFamily: Fonts.headline, fontSize: 10, color: Colors.accent, letterSpacing: 1.5, textTransform: 'uppercase' },
+  systemNote: { fontFamily: Fonts.body, fontSize: 9, color: Colors.outline, fontStyle: 'italic' },
 
-  advantageCard: {
-    borderRadius: Radius.lg,
-    padding: Spacing.xl,
-    marginBottom: Spacing.lg,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  advantageLabel: { fontFamily: Fonts.body, fontSize: 9, letterSpacing: 2.5, color: Colors.accentLight, textTransform: 'uppercase', marginBottom: 4 },
-  advantageValue: { fontFamily: Fonts.headlineBold, fontSize: 32, marginBottom: 4 },
-  advantageNote: { fontFamily: Fonts.body, fontSize: 11, color: Colors.subtext, maxWidth: 180 },
-  advantageRight: { alignItems: 'center' },
-  advantageSpeedLabel: { fontFamily: Fonts.body, fontSize: 9, color: Colors.outline, letterSpacing: 1, textTransform: 'uppercase' },
-  advantageSpeed: { fontFamily: Fonts.headlineBold, fontSize: 28, color: Colors.accent },
-  advantageSpeedUnit: { fontFamily: Fonts.body, fontSize: 10, color: Colors.accentLight },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: Spacing.lg },
+  sectionTitle: { fontFamily: Fonts.headlineBold, fontSize: 13, color: Colors.text, letterSpacing: 1.5, textTransform: 'uppercase' },
+  sectionBadge: { fontFamily: Fonts.bodyBold, fontSize: 9, color: Colors.accent, letterSpacing: 2 },
 
-  sectionCard: { backgroundColor: Colors.card, borderRadius: Radius.lg, padding: Spacing.lg, marginBottom: Spacing.md },
-  sectionTitle: { fontFamily: Fonts.headlineBold, fontSize: 13, color: Colors.text, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: Spacing.md },
-
-  statRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.md },
-  statPill: { flex: 1, backgroundColor: Colors.surfaceLow, borderRadius: Radius.md, padding: Spacing.sm, alignItems: 'center' },
-  statLabel: { fontFamily: Fonts.body, fontSize: 9, color: Colors.outline, letterSpacing: 1.5, textTransform: 'uppercase', marginBottom: 2 },
-  statValue: { fontFamily: Fonts.headlineBold, fontSize: 18, color: Colors.text },
-  statUnit: { fontFamily: Fonts.body, fontSize: 10, color: Colors.accentLight },
-
-  formationRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  formationLabel: { fontFamily: Fonts.body, fontSize: 12, color: Colors.outline },
-  formationValue: { fontFamily: Fonts.headlineBold, fontSize: 14, color: Colors.accentDim, letterSpacing: 1 },
-
-  weaknessRow: { flexDirection: 'row', alignItems: 'flex-start', gap: Spacing.sm, marginBottom: Spacing.sm },
-  severityDot: { width: 6, height: 6, borderRadius: 3, marginTop: 5 },
-  weaknessText: { fontFamily: Fonts.body, fontSize: 13, color: Colors.subtext, flex: 1, lineHeight: 20 },
-
-  recCard: { backgroundColor: Colors.surfaceLow, borderRadius: Radius.md, padding: Spacing.md, marginBottom: Spacing.sm },
-  recHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.xs },
-  recPhaseChip: { backgroundColor: Colors.secondaryContainer, borderRadius: Radius.sm, paddingHorizontal: 6, paddingVertical: 2 },
-  recPhaseText: { fontFamily: Fonts.body, fontSize: 9, color: Colors.secondary, letterSpacing: 1, textTransform: 'uppercase' },
-  recTactic: { fontFamily: Fonts.headlineBold, fontSize: 13, color: Colors.text },
-  recDesc: { fontFamily: Fonts.body, fontSize: 12, color: Colors.subtext, lineHeight: 18, marginBottom: Spacing.sm },
-  recPlayers: { flexDirection: 'row', gap: 6 },
-  playerChip: { backgroundColor: Colors.cardHighest, borderRadius: Radius.sm, paddingHorizontal: 8, paddingVertical: 3 },
-  playerChipText: { fontFamily: Fonts.headlineBold, fontSize: 11, color: Colors.accentDim },
-
-  aiCard: { backgroundColor: Colors.surfaceLow, borderRadius: Radius.lg, padding: Spacing.lg, marginBottom: Spacing.md },
-  aiHeader: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: Spacing.md },
-  aiDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.accent },
-  aiLabel: { fontFamily: Fonts.body, fontSize: 10, color: Colors.accentLight, letterSpacing: 1.5, textTransform: 'uppercase' },
-  aiText: { fontFamily: Fonts.body, fontSize: 13, color: Colors.subtext, lineHeight: 22 },
+  lineupScroll: { paddingHorizontal: Spacing.lg, paddingBottom: 4 },
 });
