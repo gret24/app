@@ -12,7 +12,6 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../constants/Colors';
 import { JERSEY_PALETTE } from '../constants/jerseyPalette';
-import BenchSetupScreen, { BenchConfig } from './BenchSetupScreen';
 import {
   quickAnalyze,
   getColorPreview,
@@ -177,8 +176,6 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
   const [step2Loading, setStep2Loading] = useState(false);
   const [prescanResult, setPrescanResult] = useState<PrescanResult | null>(null);
   const [prescanLoading, setPrescanLoading] = useState(false);
-  const [showBenchSetup, setShowBenchSetup] = useState(false);
-  const [benchConfig, setBenchConfig] = useState<BenchConfig | null>(null);
   const [firstFrameUri, setFirstFrameUri] = useState<string>('');
 
   // 갤러리에서 영상 선택
@@ -321,7 +318,6 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
         }),
         home_jersey_hex: homePickedColor ?? '',
         away_jersey_hex: awayPickedColor ?? '',
-        bench_config: benchConfig,
       };
       const result = await analyzeWithRoster(videoStem, roster, opts);
       setJobId(result.job_id);
@@ -600,29 +596,6 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
                 )}
               </View>
 
-              {/* 벤치 위치 */}
-              <View style={s.card}>
-                <Text style={s.cardTitle}>🏒 벤치 위치 (선택)</Text>
-                <Text style={s.cardSubtitle}>지정하면 아이스타임 정확도가 향상됩니다</Text>
-                {benchConfig ? (
-                  <View style={{flexDirection:"row",alignItems:"center",gap:10,marginTop:8}}>
-                    <Text style={{color:"#34C759",fontWeight:"700"}}>
-                      ✅ {benchConfig.preset ? `${benchConfig.preset} 프리셋` : "수동 지정 완료"}
-                    </Text>
-                    <Pressable onPress={()=>setBenchConfig(null)}>
-                      <Text style={{color:Colors.subtext,fontSize:12}}>초기화</Text>
-                    </Pressable>
-                  </View>
-                ) : (
-                  <Pressable
-                    style={{marginTop:8,backgroundColor:Colors.input,borderRadius:10,
-                            padding:12,alignItems:"center",borderWidth:1,borderColor:Colors.border}}
-                    onPress={()=>setShowBenchSetup(true)}>
-                    <Text style={{color:Colors.accent,fontWeight:"700"}}>📍 벤치 위치 지정하기</Text>
-                  </Pressable>
-                )}
-              </View>
-
               <Pressable
                 style={[s.primaryBtn, step2Loading && s.primaryBtnDisabled]}
                 onPress={handleFullAnalyze}
@@ -660,13 +633,6 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
           )}
         </ScrollView>
       </View>
-
-      <BenchSetupScreen
-        visible={showBenchSetup}
-        frameUri={firstFrameUri}
-        onDone={(cfg) => { setBenchConfig(cfg); setShowBenchSetup(false); }}
-        onSkip={() => setShowBenchSetup(false)}
-      />
     </Modal>
   );
 }
