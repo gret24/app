@@ -3,7 +3,8 @@ import {
   View, Text, ScrollView, Pressable, StyleSheet, Modal,
   ActivityIndicator, FlatList, Animated, Dimensions,
 } from 'react-native';
-import YoutubeIframe, { YoutubeIframeRef } from 'react-native-youtube-iframe';
+// YoutubeIframe removed — using WebView-based player
+import { WebView } from 'react-native-webview';
 import { Colors } from '../../constants/Colors';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -664,7 +665,7 @@ function AICoachPlayer({ game, onBack }: { game: GameRecord; onBack: () => void 
   const [analysis, setAnalysis] = useState<NextMoveResponse | null>(null);
   const [showOverlay, setShowOverlay] = useState(false);
   const [fadeAnim] = useState(new Animated.Value(0));
-  const playerRef = useRef<YoutubeIframeRef>(null);
+  const playerRef = useRef<any>(null);
 
   const videoId = game.youtubeUrl
     ? game.youtubeUrl.replace(/.*(?:youtu\.be\/|v=)([^&]+).*/, '$1')
@@ -750,16 +751,12 @@ function AICoachPlayer({ game, onBack }: { game: GameRecord; onBack: () => void 
       {/* Video player area */}
       <View style={aiStyles.videoContainer}>
         {videoId ? (
-          <YoutubeIframe
+          <WebView
             ref={playerRef}
-            height={SCREEN_W * 0.56}
-            width={SCREEN_W}
-            videoId={videoId}
-            play={videoPlaying}
-            onChangeState={(state: string) => {
-              if (state === 'playing') setVideoPlaying(true);
-              if (state === 'paused' || state === 'ended') setVideoPlaying(false);
-            }}
+            style={{ width: SCREEN_W, height: SCREEN_W * 0.56 }}
+            source={{ uri: `https://www.youtube.com/embed/${videoId}?autoplay=1&playsinline=1` }}
+            allowsInlineMediaPlayback
+            mediaPlaybackRequiresUserAction={false}
           />
         ) : (
           <View style={aiStyles.noVideoPlaceholder}>

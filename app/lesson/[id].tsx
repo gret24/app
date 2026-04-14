@@ -11,7 +11,7 @@ import { MOCK_LESSONS } from '../../data/mockData';
 import Svg, { Path, Line, Circle, G, Polygon, Text as SvgText } from 'react-native-svg';
 import { AVPlaybackStatus } from 'expo-av';
 import { Video, ResizeMode } from 'expo-av';
-import YoutubePlayer from 'react-native-youtube-iframe';
+import { WebView } from 'react-native-webview';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import * as MediaLibrary from 'expo-media-library';
@@ -551,15 +551,11 @@ export default function LessonDetailScreen() {
           {/* Video Player */}
           <View style={s.videoContainer}>
             {lesson.type === 'youtube' ? (
-              <YoutubePlayer
-                height={VIDEO_H}
-                width={SCREEN_W}
-                videoId={lesson.videoId!}
-                play={playing}
-                onChangeState={(state: string) => {
-                  if (state === 'playing') setPlaying(true);
-                  if (state === 'paused' || state === 'ended') setPlaying(false);
-                }}
+              <WebView
+                style={{ width: SCREEN_W, height: VIDEO_H }}
+                source={{ uri: `https://www.youtube.com/embed/${lesson.videoId}?autoplay=1&playsinline=1` }}
+                allowsInlineMediaPlayback
+                mediaPlaybackRequiresUserAction={false}
               />
             ) : (
               <Video
