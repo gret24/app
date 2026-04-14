@@ -5,7 +5,7 @@ const APP_ENV = process.env.APP_ENV || 'preview';
 // RunPod 서버 URL (포트 8000 노출됨)
 export const API_BASE_URL = APP_ENV === 'production'
   ? 'https://iceiq-api.com'       // 프로덕션 (추후 변경)
-  : 'https://iceiq-api.ngrok-free.app';  // 개발/미리보기: RunPod ngrok 고정 도메인
+  : 'http://192.168.68.53:8000';  // 개발: Mac Mini 로컬 서버
 
 // API 키
 export const API_KEY = 'iceiq-dev-key-2026';
