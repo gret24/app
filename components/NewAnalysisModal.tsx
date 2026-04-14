@@ -4,12 +4,12 @@ import {
   Text,
   StyleSheet,
   Modal,
-  TextInput,
   Pressable,
   ScrollView,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../constants/Colors';
 import { JERSEY_PALETTE } from '../constants/jerseyPalette';
 import BenchSetupScreen, { BenchConfig } from './BenchSetupScreen';
@@ -18,6 +18,7 @@ import {
   getColorPreview,
   analyzeWithRoster,
   getAnalysisStatus,
+  uploadAndAnalyze,
   prescanVideo,
   RosterEntry,
   FullAnalyzeOptions,
@@ -166,7 +167,6 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
 
   // Step 2
   const [videoStem, setVideoStem] = useState('');
-  const [quickJobId, setQuickJobId] = useState('');
   const [colors, setColors] = useState<string[]>([]);
   const [teamColors, setTeamColors] = useState<TeamColorInfo[]>([]);
   const [homeColorIdx, setHomeColorIdx] = useState<number | null>(null);
@@ -181,16 +181,15 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
   const [benchConfig, setBenchConfig] = useState<BenchConfig | null>(null);
   const [firstFrameUri, setFirstFrameUri] = useState<string>('');
 
-  // URL 입력 시 video_stem 추출 후 프레임 미리보기
-  const handleUrlChange = (text: string) => {
-    setUrl(text);
-    // YouTube URL에서 video ID 추출
-    const match = text.match(/(?:v=|youtu\.be\/|live\/|shorts\/)([A-Za-z0-9_-]{11})/);
-    if (match) {
-      const stem = match[1];
-      import('../api/config').then(({ API_BASE_URL }) => {
-        setFirstFrameUri(`${API_BASE_URL}/frame/${stem}/first`);
-      });
+  // 갤러리에서 영상 선택
+  const pickVideo = async () => {
+    const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!perm.granted) { Alert.alert('권한 필요', '갤러리 접근 권한이 필요해요'); return; }
+    const res = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Videos, quality: 1,
+    });
+    if (!res.canceled && res.assets[0]) {
+      setUrl(res.assets[0].uri);
     }
   };
 
@@ -206,7 +205,6 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
     setUrl('');
     setStep1Loading(false);
     setVideoStem('');
-    setQuickJobId('');
     setColors([]);
     setTeamColors([]);
     setHomeColorIdx(null);
@@ -235,13 +233,14 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
 
   const handleQuickAnalyze = async () => {
     if (!url.trim()) {
-      Alert.alert('오류', 'YouTube URL을 입력해 주세요.');
+      Alert.alert('오류', '영상을 선택해주세요.');
       return;
     }
     setStep1Loading(true);
     try {
-      const result = await quickAnalyze(url.trim());
-      setQuickJobId(result.job_id);
+      // 파일 업로드 + 분석
+      const filename = url.split('/').pop() || 'video.mp4';
+      const result = await uploadAndAnalyze(url.trim(), filename, { fps: 4 });
       setVideoStem(result.video_stem);
       // 완료까지 폴링
       await pollUntilDone(result.job_id, () => {});
@@ -262,7 +261,7 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
       } catch {}
       setPrescanLoading(false);
     } catch (e: any) {
-      Alert.alert('분석 오류', e.message ?? '빠른 분석에 실패했습니다.');
+      Alert.alert('분석 오류', e.message ?? '업로드 또는 분석에 실패했습니다.');
     } finally {
       setStep1Loading(false);
     }
@@ -324,7 +323,7 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
         away_jersey_hex: awayPickedColor ?? '',
         bench_config: benchConfig,
       };
-      const result = await analyzeWithRoster(url.trim(), roster, opts);
+      const result = await analyzeWithRoster(videoStem, roster, opts);
       setJobId(result.job_id);
       setStep(3);
       startPollingStep3(result.job_id);
@@ -397,30 +396,28 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
           {/* ── Step 1 ── */}
           {step === 1 && (
             <View style={s.card}>
-              <Text style={s.cardTitle}>YouTube URL 입력</Text>
-              <TextInput
-                style={s.urlInput}
-                placeholder="https://youtube.com/watch?v=..."
-                placeholderTextColor={Colors.subtext}
-                value={url}
-                onChangeText={handleUrlChange}
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="url"
-              />
+              <Text style={s.cardTitle}>📹 경기 영상 선택</Text>
               <Pressable
-                style={[s.primaryBtn, step1Loading && s.primaryBtnDisabled]}
+                style={[s.filePickerBtn, url ? { borderColor: Colors.accent } : {}]}
+                onPress={pickVideo}
+              >
+                <Text style={[s.filePickerText, url ? { color: Colors.accent } : {}]}>
+                  {url ? `✅ ${url.split('/').pop()}` : '📁 갤러리에서 영상 선택'}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[s.primaryBtn, (!url || step1Loading) && s.primaryBtnDisabled]}
                 onPress={handleQuickAnalyze}
-                disabled={step1Loading}
+                disabled={!url || step1Loading}
               >
                 {step1Loading ? (
                   <ActivityIndicator color={Colors.bg} />
                 ) : (
-                  <Text style={s.primaryBtnText}>색상 분석 시작</Text>
+                  <Text style={s.primaryBtnText}>업로드 & 분석 시작</Text>
                 )}
               </Pressable>
               {step1Loading && (
-                <Text style={s.hintText}>영상에서 팀 색상을 추출 중입니다. 잠시만 기다려 주세요...</Text>
+                <Text style={s.hintText}>영상을 업로드하고 팀 색상을 추출 중입니다...</Text>
               )}
             </View>
           )}
@@ -730,15 +727,19 @@ const s = StyleSheet.create({
   cardTitle: { fontSize: 16, fontWeight: '700', color: Colors.text },
   cardSubtitle: { fontSize: 13, color: Colors.subtext, marginTop: -8 },
 
-  urlInput: {
+  filePickerBtn: {
     backgroundColor: Colors.input,
     borderRadius: 12,
     paddingHorizontal: 16,
-    paddingVertical: 14,
-    color: Colors.text,
-    fontSize: 14,
+    paddingVertical: 18,
     borderWidth: 1,
     borderColor: Colors.border,
+    alignItems: 'center' as const,
+  },
+  filePickerText: {
+    color: Colors.subtext,
+    fontSize: 14,
+    fontWeight: '600' as const,
   },
 
   primaryBtn: {

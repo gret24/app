@@ -143,8 +143,7 @@ export default function BenchSetupScreen({ visible, frameUri: propFrameUri, fram
               />
             ) : (
               <View style={[s.framePlaceholder, { width: dispW, height: dispH }]}>
-                <Text style={s.framePlaceholderText}>📷 프리셋 버튼으로{"
-"}벤치 방향을 선택하세요</Text>
+                <Text style={s.framePlaceholderText}>📷 프리셋 버튼으로 벤치 방향을 선택하세요</Text>
               </View>
             )}
             {/* 드래그 중 사각형 */}
