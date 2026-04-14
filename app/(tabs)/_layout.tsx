@@ -97,6 +97,22 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="scouting"
+        options={{
+          href: isPlayer ? undefined : null,
+          title: '스카우팅',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="🎯" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="growth"
+        options={{
+          href: isPlayer ? undefined : null,
+          title: '성장',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="📈" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
         name="profile"
         options={{
           title: '프로필',
