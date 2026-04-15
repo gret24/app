@@ -63,11 +63,17 @@ export const uploadAndAnalyze = async (
   fileName: string,
   options: AnalyzeOptions = {},
   onProgress?: (pct: number) => void,
-): Promise<{ job_id: string; video_stem: string; filename: string }> => {
+): Promise<{ job_id: string; video_stem?: string; filename?: string }> => {
   const formData = new FormData();
   formData.append('video', { uri: fileUri, name: fileName, type: 'video/mp4' } as any);
 
-  return apiUpload('/api/analyze', formData, onProgress, TIMEOUTS.upload);
+  const res = await apiUpload<any>('/api/analyze', formData, onProgress, TIMEOUTS.upload);
+  // 서버가 video_stem 미제공 → job_id를 video_stem으로 사용
+  return {
+    job_id: res.job_id,
+    video_stem: res.video_stem || res.job_id,
+    filename: fileName,
+  };
 };
 
 // 분석 상태 조회

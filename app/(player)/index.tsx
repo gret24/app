@@ -172,7 +172,7 @@ export default function PlayerAnalysisScreen() {
         fps: 4, home_roster: finalHomeRoster, away_roster: finalAwayRoster,
       });
       job_id = res.job_id;
-      stem = res.video_stem;
+      stem = res.video_stem || res.job_id || 'unknown';
 
       setVideoStem(stem);
       setVideoPath(input);
