@@ -13,13 +13,12 @@ import PlayerTracker, { TeamRosterList } from '../../components/PlayerTracker';
 import { RinkSVG } from '../../components/TacticsAnimator';
 import { getAllTracks, getAllPlayersAtTime } from '../../api/trackingService';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadAndAnalyze, waitForAnalysis, getPlayers, getReport, getShifts } from '../../api/analysisService';
+import { uploadAndAnalyze, waitForAnalysis, getPlayers, getReport } from '../../api/analysisService';
 import { generateHighlight, getVideoStreamUrl } from '../../api/highlightService';
 import { API_BASE_URL } from '../../api/config';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
 import { useAuth } from '../../contexts/AuthContext';
 import { addGame, getGames, updateGame, deleteGame, type GameRecord } from '../../api/gamesService';
-import BenchSetupScreen, { BenchConfig } from '../../components/BenchSetupScreen';
 import HeatmapView from '../../components/HeatmapView';
 import { getHeatmapImageUrl } from '../../api/heatmapService';
 
@@ -67,8 +66,6 @@ export default function PlayerAnalysisScreen() {
   const [awayRoster, setAwayRoster] = useState('');
   const [showRoster, setShowRoster] = useState(false);
   const [showRosterModal, setShowRosterModal] = useState(false);
-  const [showBenchSetup, setShowBenchSetup] = useState(false);
-  const [benchConfig, setBenchConfig] = useState<BenchConfig | null>(null);
   const [homeJerseyHex, setHomeJerseyHex] = useState<string | undefined>(undefined);
   const [awayJerseyHex, setAwayJerseyHex] = useState<string | undefined>(undefined);
   const [rosterForAnalysis, setRosterForAnalysis] = useState<{
@@ -155,7 +152,7 @@ export default function PlayerAnalysisScreen() {
   };
 
   // 분석 시작
-  const startAnalysis = async (homeR?: string, awayR?: string, benchCfg?: BenchConfig | null) => {
+  const startAnalysis = async (homeR?: string, awayR?: string, benchCfg?: any) => {
     const input = url.trim();
     if (!input) { Alert.alert('오류', '영상을 선택해주세요'); return; }
 
@@ -243,7 +240,9 @@ export default function PlayerAnalysisScreen() {
       if (user?.uid) getGames(user.uid).then(setMyGames).catch(() => {});
       setStep('select_player');
     } catch (e: any) {
-      Alert.alert('분석 실패', e.message || '서버 연결을 확인해주세요');
+      const errorDetail = JSON.stringify(e, Object.getOwnPropertyNames(e), 2);
+      console.error('[라인 243] 분석 실패:', errorDetail);
+      Alert.alert('분석 실패', errorDetail);
       setStep('input');
     }
   };
@@ -252,13 +251,8 @@ export default function PlayerAnalysisScreen() {
     if (!selectedPlayer || !videoStem) return;
     setLoadingShifts(true);
     try {
-      const data = await getShifts(videoStem, selectedPlayer.jersey);
-      setShifts(data.shifts.map((s, i) => ({
-        shift_number: s.shift_number ?? i + 1,
-        start_time: s.start_time,
-        end_time: s.end_time,
-        duration: s.duration,
-      })));
+      // getShifts 함수는 서버에 없음 — 하이라이트 생성으로 시프트 추출
+      throw new Error('getShifts not available');
     } catch (e: any) {
       // API 실패 시 하이라이트에서 시프트 추출 시도
       try {
@@ -409,7 +403,7 @@ export default function PlayerAnalysisScreen() {
                 const awayList = rosterForAnalysis.filter(p => p.team === 'AWAY').map(p => p.jersey).join(',');
                 setHomeRoster(homeList);
                 setAwayRoster(awayList);
-                setShowBenchSetup(true);
+                startAnalysis(homeList, awayList, null);
               }}>
               <Text style={{ color: Colors.bg, fontWeight: '800', fontSize: 16 }}>🏒 분석 시작</Text>
             </Pressable>
@@ -417,23 +411,6 @@ export default function PlayerAnalysisScreen() {
         </View>
       </Modal>
 
-      <BenchSetupScreen
-        visible={showBenchSetup}
-        frameUri={videoStem ? `${API_BASE_URL}/frame/${videoStem}/first` : undefined}
-        onDone={(cfg) => {
-          setBenchConfig(cfg);
-          setShowBenchSetup(false);
-          const homeList = rosterForAnalysis.filter(p => p.team === 'HOME').map(p => p.jersey).join(',');
-          const awayList = rosterForAnalysis.filter(p => p.team === 'AWAY').map(p => p.jersey).join(',');
-          startAnalysis(homeList, awayList, cfg);
-        }}
-        onSkip={() => {
-          setShowBenchSetup(false);
-          const homeList = rosterForAnalysis.filter(p => p.team === 'HOME').map(p => p.jersey).join(',');
-          const awayList = rosterForAnalysis.filter(p => p.team === 'AWAY').map(p => p.jersey).join(',');
-          startAnalysis(homeList, awayList, null);
-        }}
-      />
 
       <ScrollView style={s.root} contentContainerStyle={s.container}>
         <View style={s.header}>
