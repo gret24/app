@@ -65,7 +65,7 @@ export const uploadAndAnalyze = async (
   onProgress?: (pct: number) => void,
 ): Promise<{ job_id: string; video_stem?: string; filename?: string }> => {
   const formData = new FormData();
-  formData.append('file', { uri: fileUri, name: fileName, type: 'video/mp4' } as any);
+  formData.append('video', { uri: fileUri, name: fileName, type: 'video/mp4' } as any);
   formData.append('team_name', 'Aigis'); // 기본값
   formData.append('roster_file', 'aigis.json'); // 기본값
 
