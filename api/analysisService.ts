@@ -65,10 +65,7 @@ export const uploadAndAnalyze = async (
   onProgress?: (pct: number) => void,
 ): Promise<{ job_id: string; video_stem: string; filename: string }> => {
   const formData = new FormData();
-  formData.append('file', { uri: fileUri, name: fileName, type: 'video/mp4' } as any);
-  formData.append('fps', String(options.fps ?? 4));
-  formData.append('home_roster', options.home_roster ?? '');
-  formData.append('away_roster', options.away_roster ?? '');
+  formData.append('video', { uri: fileUri, name: fileName, type: 'video/mp4' } as any);
 
   return apiUpload('/api/analyze', formData, onProgress, TIMEOUTS.upload);
 };
