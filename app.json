@@ -15,7 +15,8 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#0A0A0F"
-      }
+      },
+      "usesCleartextTraffic": true
     },
     "web": {
       "bundler": "metro"
