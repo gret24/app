@@ -19,7 +19,7 @@ import {
   getColorPreview,
   analyzeWithRoster,
   getAnalysisStatus,
-  uploadAndAnalyze,
+  uploadViaR2,
   analyzeYoutube,
   prescanVideo,
   RosterEntry,
@@ -281,9 +281,9 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
     }
     setStep1Loading(true);
     try {
-      // 파일 업로드 + 분석
+      // R2 presigned 업로드 + 분석
       const filename = url.split('/').pop() || 'video.mp4';
-      const result = await uploadAndAnalyze(url.trim(), filename, { fps: 4 });
+      const result = await uploadViaR2(url.trim(), filename, {});
       setVideoStem(result.video_stem);
       // 완료까지 폴링
       await pollUntilDone(result.job_id, () => {});

@@ -59,7 +59,7 @@ export const analyzeVideo = async (
   }, TIMEOUTS.analysis);
 };
 
-// 파일 업로드 + 분석
+// 파일 업로드 + 분석 (레거시 — 직접 서버 업로드, Cloudflare 100MB 제한 있음)
 export const uploadAndAnalyze = async (
   fileUri: string,
   fileName: string,
@@ -68,15 +68,74 @@ export const uploadAndAnalyze = async (
 ): Promise<{ job_id: string; video_stem?: string; filename?: string }> => {
   const formData = new FormData();
   formData.append('file', { uri: fileUri, name: fileName, type: 'video/mp4' } as any);
-  formData.append('team_name', 'Aigis'); // 기본값
-  formData.append('roster_file', 'aigis.json'); // 기본값
+  formData.append('team_name', 'Aigis');
+  formData.append('roster_file', 'aigis.json');
 
   const res = await apiUpload<any>('/api/analyze', formData, onProgress, TIMEOUTS.upload);
-  // 서버가 video_stem 미제공 → job_id를 video_stem으로 사용
   return {
     job_id: res.job_id,
     video_stem: res.video_stem || res.job_id,
     filename: fileName,
+  };
+};
+
+// R2 Presigned 업로드 + 분석 (권장 — Cloudflare 제한 없음, 최대 파일크기 무제한)
+export const uploadViaR2 = async (
+  fileUri: string,
+  fileName: string,
+  options: AnalyzeOptions = {},
+  onProgress?: (pct: number) => void,
+): Promise<{ job_id: string; video_stem: string }> => {
+  // Step 1: Presigned URL 발급
+  onProgress?.(2);
+  const presignForm = new FormData();
+  presignForm.append('filename', fileName);
+  presignForm.append('content_type', 'video/mp4');
+  const presigned = await apiUpload<{ job_id: string; upload_url: string; r2_key: string }>(
+    '/api/upload/presigned', presignForm, undefined, TIMEOUTS.default,
+  );
+
+  // Step 2: R2에 직접 PUT (XHR — progress 지원, 인증 헤더 없음)
+  await new Promise<void>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', presigned.upload_url);
+    xhr.setRequestHeader('Content-Type', 'video/mp4');
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        // 5% ~ 80% 구간을 업로드 진행률로 매핑
+        onProgress(5 + Math.round((e.loaded / e.total) * 75));
+      }
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        onProgress?.(82);
+        resolve();
+      } else {
+        reject(new Error(`R2 upload failed: HTTP ${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error('R2 upload network error'));
+    xhr.ontimeout = () => reject(new Error('R2 upload timeout'));
+    xhr.timeout = TIMEOUTS.upload;
+    // React Native: uri 객체를 직접 전송 (파일 스트림으로 읽힘)
+    xhr.send({ uri: fileUri, type: 'video/mp4', name: fileName } as any);
+  });
+
+  // Step 3: 서버에 분석 트리거
+  onProgress?.(85);
+  const triggerForm = new FormData();
+  triggerForm.append('job_id', presigned.job_id);
+  triggerForm.append('r2_key', presigned.r2_key);
+  triggerForm.append('team_name', options.team_name ?? 'Aigis');
+  triggerForm.append('roster_file', options.roster_file ?? 'aigis.json');
+  const result = await apiUpload<{ job_id: string; video_stem: string }>(
+    '/api/analyze/r2', triggerForm, undefined, TIMEOUTS.default,
+  );
+
+  onProgress?.(90);
+  return {
+    job_id: result.job_id,
+    video_stem: result.video_stem || result.job_id,
   };
 };
 
