@@ -13,7 +13,7 @@ import PlayerTracker, { TeamRosterList } from '../../components/PlayerTracker';
 import { RinkSVG } from '../../components/TacticsAnimator';
 import { getAllTracks, getAllPlayersAtTime } from '../../api/trackingService';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadAndAnalyze, waitForAnalysis, getPlayers, getReport } from '../../api/analysisService';
+import { uploadAndAnalyze, analyzeYoutube, waitForAnalysis, getPlayers, getReport } from '../../api/analysisService';
 import { generateHighlight, getVideoStreamUrl } from '../../api/highlightService';
 import { API_BASE_URL } from '../../api/config';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
@@ -61,7 +61,9 @@ export default function PlayerAnalysisScreen() {
 
   // 분석 흐름
   const [step, setStep] = useState<AppStep>('input');
+  const [inputMode, setInputMode] = useState<'file' | 'youtube'>('file');
   const [url, setUrl] = useState('');
+  const [youtubeUrl, setYoutubeUrl] = useState('');
   const [homeRoster, setHomeRoster] = useState(''); // "4,14,47,94"
   const [awayRoster, setAwayRoster] = useState('');
   const [showRoster, setShowRoster] = useState(false);
@@ -153,34 +155,46 @@ export default function PlayerAnalysisScreen() {
 
   // 분석 시작
   const startAnalysis = async (homeR?: string, awayR?: string, benchCfg?: any) => {
-    const input = url.trim();
-    if (!input) { Alert.alert('오류', '영상을 선택해주세요'); return; }
+    const isYoutube = inputMode === 'youtube';
+    const input = isYoutube ? youtubeUrl.trim() : url.trim();
+    if (!input) {
+      Alert.alert('오류', isYoutube ? 'YouTube URL을 입력해주세요' : '영상을 선택해주세요');
+      return;
+    }
 
     const finalHomeRoster = homeR ?? homeRoster;
     const finalAwayRoster = awayR ?? awayRoster;
 
     setStep('analyzing');
     animateProgress(5);
-    setProgressMsg('영상 업로드 중...');
+    setProgressMsg(isYoutube ? 'YouTube 영상 다운로드 중...' : '영상 업로드 중...');
 
     try {
       let job_id: string, stem: string;
 
-      animateProgress(10);
-      const filename = input.split('/').pop() || 'video.mp4';
-      const res = await uploadAndAnalyze(input, filename, {
-        fps: 4, home_roster: finalHomeRoster, away_roster: finalAwayRoster,
-      });
-      job_id = res.job_id;
-      stem = res.video_stem || res.job_id || 'unknown';
+      if (isYoutube) {
+        const res = await analyzeYoutube(input, { team_name: 'Aigis', roster_file: 'aigis.json' });
+        job_id = res.job_id;
+        stem = res.video_stem || res.job_id;
+        setVideoPath(`data/uploads/${stem}.mp4`);
+      } else {
+        animateProgress(10);
+        const filename = input.split('/').pop() || 'video.mp4';
+        const res = await uploadAndAnalyze(input, filename, {
+          fps: 4, home_roster: finalHomeRoster, away_roster: finalAwayRoster,
+        });
+        job_id = res.job_id;
+        stem = res.video_stem || res.job_id || 'unknown';
+        setVideoPath(input);
+      }
 
       setVideoStem(stem);
-      setVideoPath(input);
       // Firestore에 게임 저장
       if (user?.uid) {
+        const gameTitle = isYoutube ? stem : (input.split('/').pop() || stem).replace(/\.[^.]+$/, '');
         const gid = await addGame(user.uid, {
           videoStem: stem,
-          title: filename.replace(/\.[^.]+$/, ''),
+          title: gameTitle,
           status: 'analyzing',
         });
         setCurrentGameId(gid);
@@ -306,7 +320,8 @@ export default function PlayerAnalysisScreen() {
   };
 
   const reset = () => {
-    setStep('input'); setUrl(''); setVideoStem(''); setVideoPath('');
+    setStep('input'); setInputMode('file'); setUrl(''); setYoutubeUrl('');
+    setVideoStem(''); setVideoPath('');
     setProgress(0); setProgressMsg(''); setPlayers([]);
     setSelectedPlayer(null); setShifts([]);
     setHomeJerseyHex(undefined); setAwayJerseyHex(undefined);
@@ -462,11 +477,46 @@ export default function PlayerAnalysisScreen() {
 
         <View style={s.card}>
           <Text style={s.cardTitle}>📹 경기 영상</Text>
-          <Pressable style={[s.fileBtn, url ? { borderColor: Colors.accent } : {}]} onPress={pickVideo}>
-            <Text style={[s.fileBtnText, url ? { color: Colors.accent } : {}]}>
-              {url ? `✅ ${url.split('/').pop()}` : '📁 갤러리에서 영상 선택'}
-            </Text>
-          </Pressable>
+          {/* 입력 모드 토글 */}
+          <View style={s.modeToggle}>
+            <Pressable
+              style={[s.modeBtn, inputMode === 'file' && s.modeBtnActive]}
+              onPress={() => setInputMode('file')}
+            >
+              <Text style={[s.modeBtnText, inputMode === 'file' && s.modeBtnTextActive]}>
+                📁 파일 선택
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[s.modeBtn, inputMode === 'youtube' && s.modeBtnActive]}
+              onPress={() => setInputMode('youtube')}
+            >
+              <Text style={[s.modeBtnText, inputMode === 'youtube' && s.modeBtnTextActive]}>
+                🔗 YouTube URL
+              </Text>
+            </Pressable>
+          </View>
+          {/* 파일 선택 모드 */}
+          {inputMode === 'file' && (
+            <Pressable style={[s.fileBtn, url ? { borderColor: Colors.accent } : {}]} onPress={pickVideo}>
+              <Text style={[s.fileBtnText, url ? { color: Colors.accent } : {}]}>
+                {url ? `✅ ${url.split('/').pop()}` : '📁 갤러리에서 영상 선택'}
+              </Text>
+            </Pressable>
+          )}
+          {/* YouTube URL 모드 */}
+          {inputMode === 'youtube' && (
+            <TextInput
+              style={s.urlInput}
+              value={youtubeUrl}
+              onChangeText={setYoutubeUrl}
+              placeholder="https://youtube.com/watch?v=..."
+              placeholderTextColor={Colors.subtext}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+            />
+          )}
         </View>
 
         {/* 로스터 입력 (선택) */}
@@ -1002,6 +1052,20 @@ const s = StyleSheet.create({
   rosterLabel: { fontSize: 12, fontWeight: '700', color: Colors.accent, marginBottom: 6, letterSpacing: 0.5 },
   rosterInput: { height: 44, backgroundColor: Colors.input, borderRadius: 10, paddingHorizontal: 12, color: Colors.text, fontSize: 14, borderWidth: 1, borderColor: Colors.border },
   rosterHint: { fontSize: 11, color: Colors.subtext, marginTop: 10, lineHeight: 16 },
+  modeToggle: { flexDirection: 'row', gap: 8 },
+  modeBtn: {
+    flex: 1, paddingVertical: 9, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.input, alignItems: 'center',
+  },
+  modeBtnActive: { borderColor: Colors.accent, backgroundColor: Colors.accent + '22' },
+  modeBtnText: { fontSize: 13, fontWeight: '600', color: Colors.subtext },
+  modeBtnTextActive: { color: Colors.accent },
+  urlInput: {
+    height: 44, backgroundColor: Colors.input, borderRadius: 10,
+    paddingHorizontal: 14, color: Colors.text, fontSize: 13,
+    borderWidth: 1, borderColor: Colors.border,
+  },
   sectionHeader: { fontSize: 14, fontWeight: '700', color: Colors.subtext, marginBottom: 10, letterSpacing: 0.5 },
   gameCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.card, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: Colors.border },
   gameCardLeft: { flex: 1 },
