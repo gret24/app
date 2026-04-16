@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, Pressable,
-  FlatList, Dimensions, ActivityIndicator,
+  FlatList, Dimensions, ActivityIndicator, Alert, TextInput,
 } from 'react-native';
 import NewAnalysisModal from '../../components/NewAnalysisModal';
 
 import { getPlayers as apiGetPlayers, getReport as apiGetReport } from '../../api/analysisService';
+import { reapplyRoster } from '../../api/rosterService';
 import { apiGet } from '../../api/client';
 import Svg, {
   Rect, Line, Circle, G, RadialGradient, Defs, Stop, Ellipse, Text as SvgText, Polyline, Polygon,
@@ -16,6 +17,90 @@ import { MOCK_PLAYERS, MOCK_ZONE_DATA, MOCK_OVERVIEW, Player } from '../../data/
 const { width: SCREEN_W } = Dimensions.get('window');
 const RINK_W = SCREEN_W - 40;
 const RINK_H = RINK_W * 0.46;
+
+// ─────────────────────────────────────────────
+// Roster Reapply Card
+// ─────────────────────────────────────────────
+function RosterReapplyCard() {
+  const [filename, setFilename] = useState('aigis.json');
+  const [loading, setLoading] = useState(false);
+
+  const handleReapply = async () => {
+    const trimmed = filename.trim();
+    if (!trimmed) {
+      Alert.alert('오류', '로스터 파일명을 입력해주세요 (예: aigis.json)');
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await reapplyRoster(trimmed);
+      Alert.alert(
+        '재적용 완료',
+        `${result.updated}개 경기에 업데이트되었습니다` +
+          (result.skipped > 0 ? ` (${result.skipped}개 스킵)` : '') +
+          (result.errors > 0 ? `\n⚠️ 오류 ${result.errors}건` : ''),
+      );
+    } catch (e: any) {
+      Alert.alert('재적용 실패', e.message ?? '서버 오류');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <View style={rr.card}>
+      <Text style={rr.title}>🔄 로스터 재적용</Text>
+      <Text style={rr.sub}>선수 정보를 수정한 뒤 기존 분석에 일괄 반영합니다</Text>
+      <View style={rr.row}>
+        <TextInput
+          style={rr.input}
+          value={filename}
+          onChangeText={setFilename}
+          placeholder="roster.json"
+          placeholderTextColor={Colors.subtext}
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <Pressable
+          style={[rr.btn, loading && rr.btnDisabled]}
+          onPress={handleReapply}
+          disabled={loading}
+        >
+          {loading
+            ? <ActivityIndicator color={Colors.bg} size="small" />
+            : <Text style={rr.btnText}>재적용</Text>
+          }
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+const rr = StyleSheet.create({
+  card: {
+    backgroundColor: Colors.card, borderRadius: 14,
+    padding: 16, gap: 10,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  title: { fontSize: 14, fontWeight: '700', color: Colors.text },
+  sub: { fontSize: 12, color: Colors.subtext, marginTop: -4 },
+  row: { flexDirection: 'row', gap: 10, alignItems: 'center' },
+  input: {
+    flex: 1,
+    backgroundColor: Colors.input, borderRadius: 10,
+    paddingHorizontal: 12, paddingVertical: 10,
+    color: Colors.text, fontSize: 13,
+    borderWidth: 1, borderColor: Colors.border,
+  },
+  btn: {
+    backgroundColor: Colors.accent, borderRadius: 10,
+    paddingHorizontal: 16, paddingVertical: 10,
+    alignItems: 'center', justifyContent: 'center',
+    minWidth: 72,
+  },
+  btnDisabled: { opacity: 0.5 },
+  btnText: { color: Colors.bg, fontWeight: '700', fontSize: 13 },
+});
 
 // ─────────────────────────────────────────────
 // Hockey Rink SVG
@@ -880,6 +965,9 @@ export default function AnalysisScreen() {
             </View>
           )}
         </View>
+
+        {/* Roster Reapply */}
+        <RosterReapplyCard />
 
         {/* Player Selector */}
         <View style={as.section}>

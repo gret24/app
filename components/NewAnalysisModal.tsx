@@ -13,6 +13,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../constants/Colors';
 import { JERSEY_PALETTE } from '../constants/jerseyPalette';
+import RinkLinePicker from './RinkLinePicker';
 import {
   quickAnalyze,
   getColorPreview,
@@ -170,6 +171,8 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
 
   // Step 2
   const [videoStem, setVideoStem] = useState('');
+  const [showRinkPicker, setShowRinkPicker] = useState(false);
+  const [homographyMatrix, setHomographyMatrix] = useState<number[] | null>(null);
   const [colors, setColors] = useState<string[]>([]);
   const [teamColors, setTeamColors] = useState<TeamColorInfo[]>([]);
   const [homeColorIdx, setHomeColorIdx] = useState<number | null>(null);
@@ -181,6 +184,8 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
   const [prescanResult, setPrescanResult] = useState<PrescanResult | null>(null);
   const [prescanLoading, setPrescanLoading] = useState(false);
   const [firstFrameUri, setFirstFrameUri] = useState<string>('');
+  const [benchConfig, setBenchConfig] = useState<any>(null);
+  const [showBenchSetup, setShowBenchSetup] = useState(false);
 
   // 갤러리에서 영상 선택
   const pickVideo = async () => {
@@ -208,6 +213,8 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
     setYoutubeUrl('');
     setStep1Loading(false);
     setVideoStem('');
+    setShowRinkPicker(false);
+    setHomographyMatrix(null);
     setColors([]);
     setTeamColors([]);
     setHomeColorIdx(null);
@@ -250,6 +257,7 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
       const { API_BASE_URL } = await import('../api/config');
       setFirstFrameUri(`${API_BASE_URL}/frame/${result.video_stem}/first`);
       setHomeColorIdx(0);
+      setShowRinkPicker(true);
       setStep(2);
       setPrescanLoading(true);
       try {
@@ -283,10 +291,11 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
       const preview = await getColorPreview(result.video_stem);
       setColors(preview.colors ?? []);
       setTeamColors(preview.team_colors ?? []);
-      // 첫 프레임 이미지 URL 설정 (벤치 지정용)
+      // 첫 프레임 이미지 URL 설정
       const { API_BASE_URL } = await import('../api/config');
       setFirstFrameUri(`${API_BASE_URL}/frame/${result.video_stem}/first`);
       setHomeColorIdx(0);
+      setShowRinkPicker(true);
       setStep(2);
       // prescan 자동 실행
       setPrescanLoading(true);
@@ -425,7 +434,9 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
                 <Text style={[s.stepNum, step >= n && s.stepNumActive]}>{n}</Text>
               </View>
               <Text style={[s.stepLabel, step >= n && s.stepLabelActive]}>
-                {n === 1 ? 'URL 입력' : n === 2 ? '색상 & 선수' : '분석'}
+                {n === 1 ? 'URL 입력'
+                 : n === 2 ? (step === 2 && showRinkPicker ? '라인 지정' : '색상 & 선수')
+                 : '분석'}
               </Text>
               {n < 3 && <View style={[s.stepLine, step > n && s.stepLineActive]} />}
             </View>
@@ -516,8 +527,23 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
             </View>
           )}
 
+          {/* ── Step 2: 링크 라인 지정 (서브스텝) ── */}
+          {step === 2 && showRinkPicker && (
+            <View style={s.card}>
+              <RinkLinePicker
+                videoStem={videoStem}
+                frameUri={firstFrameUri || undefined}
+                onSave={(matrix) => {
+                  setHomographyMatrix(matrix);
+                  setShowRinkPicker(false);
+                }}
+                onSkip={() => setShowRinkPicker(false)}
+              />
+            </View>
+          )}
+
           {/* ── Step 2 ── */}
-          {step === 2 && (
+          {step === 2 && !showRinkPicker && (
             <>
               {/* prescan 결과 */}
               {prescanLoading && (

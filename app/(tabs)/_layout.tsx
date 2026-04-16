@@ -63,6 +63,10 @@ export default function TabsLayout() {
         options={{ href: null }}
       />
       <Tabs.Screen
+        name="scouting"
+        options={{ href: null }}
+      />
+      <Tabs.Screen
         name="analysis"
         options={{
           href: analysisHidden ? null : undefined,
@@ -84,6 +88,13 @@ export default function TabsLayout() {
           href: teamTabHidden ? null : undefined,
           title: '팀',
           tabBarIcon: ({ focused }) => <TabIcon emoji="🏟️" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="icechess"
+        options={{
+          title: 'Ice Chess',
+          tabBarIcon: ({ focused }) => <TabIcon emoji="♟️" focused={focused} />,
         }}
       />
       <Tabs.Screen
