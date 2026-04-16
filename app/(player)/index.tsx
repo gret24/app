@@ -13,7 +13,7 @@ import PlayerTracker, { TeamRosterList } from '../../components/PlayerTracker';
 import { RinkSVG } from '../../components/TacticsAnimator';
 import { getAllTracks, getAllPlayersAtTime } from '../../api/trackingService';
 import * as ImagePicker from 'expo-image-picker';
-import { uploadViaR2, analyzeYoutube, waitForAnalysis, getPlayers, getReport } from '../../api/analysisService';
+import { uploadAndAnalyzeR2, analyzeYoutube, waitForAnalysis, getPlayers, getReport } from '../../api/analysisService';
 import { generateHighlight, getVideoStreamUrl } from '../../api/highlightService';
 import { API_BASE_URL } from '../../api/config';
 import { Video, ResizeMode, AVPlaybackStatus } from 'expo-av';
@@ -180,7 +180,7 @@ export default function PlayerAnalysisScreen() {
       } else {
         animateProgress(10);
         const filename = input.split('/').pop() || 'video.mp4';
-        const res = await uploadViaR2(input, filename, {}, (pct) => animateProgress(pct));
+        const res = await uploadAndAnalyzeR2(input, filename, {}, (pct) => animateProgress(pct));
         job_id = res.job_id;
         stem = res.video_stem || res.job_id;
         setVideoPath(input);

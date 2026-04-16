@@ -1,5 +1,5 @@
 import { apiGet, apiPost, apiUpload } from './client';
-import { POLL_INTERVAL, TIMEOUTS } from './config';
+import { API_BASE_URL, API_KEY, POLL_INTERVAL, TIMEOUTS } from './config';
 
 export interface JobStatus {
   status: 'queued' | 'processing' | 'done' | 'error';
@@ -137,6 +137,50 @@ export const uploadViaR2 = async (
     job_id: result.job_id,
     video_stem: result.video_stem || result.job_id,
   };
+};
+
+// R2 presigned 업로드 + 분석 (fetch + blob 방식 — React Native 권장)
+export const uploadAndAnalyzeR2 = async (
+  fileUri: string,
+  fileName: string,
+  options: AnalyzeOptions = {},
+  onProgress?: (pct: number) => void,
+): Promise<{ job_id: string; video_stem: string }> => {
+  const authHeaders = { 'X-API-Key': API_KEY };
+
+  // Step 1: Presigned URL 발급
+  const res1 = await fetch(`${API_BASE_URL}/api/upload/presigned`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `filename=${encodeURIComponent(fileName)}&content_type=video%2Fmp4`,
+  });
+  if (!res1.ok) throw new Error(`presigned 발급 실패: HTTP ${res1.status}`);
+  const { job_id, upload_url, r2_key } = await res1.json();
+
+  // Step 2: 파일을 blob으로 읽어 R2에 직접 PUT (인증 헤더 없음)
+  onProgress?.(10);
+  const blob = await fetch(fileUri).then(r => r.blob());
+  onProgress?.(30);
+
+  const putRes = await fetch(upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'video/mp4' },
+    body: blob,
+  });
+  if (!putRes.ok) throw new Error(`R2 업로드 실패: HTTP ${putRes.status}`);
+  onProgress?.(80);
+
+  // Step 3: 서버에 분석 트리거
+  const res3 = await fetch(`${API_BASE_URL}/api/analyze/r2`, {
+    method: 'POST',
+    headers: { ...authHeaders, 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `job_id=${encodeURIComponent(job_id)}&r2_key=${encodeURIComponent(r2_key)}&team_name=${encodeURIComponent(options.team_name ?? 'Aigis')}&roster_file=${encodeURIComponent(options.roster_file ?? 'aigis.json')}`,
+  });
+  if (!res3.ok) throw new Error(`분석 트리거 실패: HTTP ${res3.status}`);
+  onProgress?.(90);
+
+  const result = await res3.json();
+  return { job_id: result.job_id, video_stem: result.video_stem || result.job_id };
 };
 
 // YouTube URL 분석
