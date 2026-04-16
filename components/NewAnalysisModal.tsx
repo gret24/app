@@ -8,6 +8,7 @@ import {
   ScrollView,
   ActivityIndicator,
   Alert,
+  TextInput,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors } from '../constants/Colors';
@@ -18,6 +19,7 @@ import {
   analyzeWithRoster,
   getAnalysisStatus,
   uploadAndAnalyze,
+  analyzeYoutube,
   prescanVideo,
   RosterEntry,
   FullAnalyzeOptions,
@@ -161,7 +163,9 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
   const [step, setStep] = useState<Step>(1);
 
   // Step 1
+  const [inputMode, setInputMode] = useState<'file' | 'youtube'>('file');
   const [url, setUrl] = useState(initialUrl ?? '');
+  const [youtubeUrl, setYoutubeUrl] = useState('');
   const [step1Loading, setStep1Loading] = useState(false);
 
   // Step 2
@@ -199,7 +203,9 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
 
   const reset = () => {
     setStep(1);
+    setInputMode('file');
     setUrl('');
+    setYoutubeUrl('');
     setStep1Loading(false);
     setVideoStem('');
     setColors([]);
@@ -224,6 +230,38 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
   const handleClose = () => {
     reset();
     onClose();
+  };
+
+  // ── Step 1: YouTube 분석 ──────────────────────────────────────────
+
+  const handleYoutubeAnalyze = async () => {
+    if (!youtubeUrl.trim()) {
+      Alert.alert('오류', 'YouTube URL을 입력해주세요.');
+      return;
+    }
+    setStep1Loading(true);
+    try {
+      const result = await analyzeYoutube(youtubeUrl.trim());
+      setVideoStem(result.video_stem);
+      await pollUntilDone(result.job_id, () => {});
+      const preview = await getColorPreview(result.video_stem);
+      setColors(preview.colors ?? []);
+      setTeamColors(preview.team_colors ?? []);
+      const { API_BASE_URL } = await import('../api/config');
+      setFirstFrameUri(`${API_BASE_URL}/frame/${result.video_stem}/first`);
+      setHomeColorIdx(0);
+      setStep(2);
+      setPrescanLoading(true);
+      try {
+        const ps = await prescanVideo(result.video_stem, homePickedColor ?? undefined, awayPickedColor ?? undefined);
+        setPrescanResult(ps);
+      } catch {}
+      setPrescanLoading(false);
+    } catch (e: any) {
+      Alert.alert('분석 오류', e.message || JSON.stringify(e));
+    } finally {
+      setStep1Loading(false);
+    }
   };
 
   // ── Step 1: 빠른 색상 분석 ────────────────────────────────────────
@@ -399,27 +437,81 @@ export default function NewAnalysisModal({ visible, onClose, onDone, initialUrl 
           {step === 1 && (
             <View style={s.card}>
               <Text style={s.cardTitle}>📹 경기 영상 선택</Text>
-              <Pressable
-                style={[s.filePickerBtn, url ? { borderColor: Colors.accent } : {}]}
-                onPress={pickVideo}
-              >
-                <Text style={[s.filePickerText, url ? { color: Colors.accent } : {}]}>
-                  {url ? `✅ ${url.split('/').pop()}` : '📁 갤러리에서 영상 선택'}
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[s.primaryBtn, (!url || step1Loading) && s.primaryBtnDisabled]}
-                onPress={handleQuickAnalyze}
-                disabled={!url || step1Loading}
-              >
-                {step1Loading ? (
-                  <ActivityIndicator color={Colors.bg} />
-                ) : (
-                  <Text style={s.primaryBtnText}>업로드 & 분석 시작</Text>
-                )}
-              </Pressable>
-              {step1Loading && (
-                <Text style={s.hintText}>영상을 업로드하고 팀 색상을 추출 중입니다...</Text>
+
+              {/* 입력 모드 토글 */}
+              <View style={s.modeToggle}>
+                <Pressable
+                  style={[s.modeBtn, inputMode === 'file' && s.modeBtnActive]}
+                  onPress={() => setInputMode('file')}
+                >
+                  <Text style={[s.modeBtnText, inputMode === 'file' && s.modeBtnTextActive]}>
+                    📁 갤러리
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[s.modeBtn, inputMode === 'youtube' && s.modeBtnActive]}
+                  onPress={() => setInputMode('youtube')}
+                >
+                  <Text style={[s.modeBtnText, inputMode === 'youtube' && s.modeBtnTextActive]}>
+                    🎥 YouTube
+                  </Text>
+                </Pressable>
+              </View>
+
+              {/* 갤러리 모드 */}
+              {inputMode === 'file' && (
+                <>
+                  <Pressable
+                    style={[s.filePickerBtn, url ? { borderColor: Colors.accent } : {}]}
+                    onPress={pickVideo}
+                  >
+                    <Text style={[s.filePickerText, url ? { color: Colors.accent } : {}]}>
+                      {url ? `✅ ${url.split('/').pop()}` : '📁 갤러리에서 영상 선택'}
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    style={[s.primaryBtn, (!url || step1Loading) && s.primaryBtnDisabled]}
+                    onPress={handleQuickAnalyze}
+                    disabled={!url || step1Loading}
+                  >
+                    {step1Loading
+                      ? <ActivityIndicator color={Colors.bg} />
+                      : <Text style={s.primaryBtnText}>업로드 & 분석 시작</Text>
+                    }
+                  </Pressable>
+                  {step1Loading && (
+                    <Text style={s.hintText}>영상을 업로드하고 팀 색상을 추출 중입니다...</Text>
+                  )}
+                </>
+              )}
+
+              {/* YouTube 모드 */}
+              {inputMode === 'youtube' && (
+                <>
+                  <TextInput
+                    style={s.urlInput}
+                    placeholder="https://youtube.com/watch?v=..."
+                    placeholderTextColor={Colors.subtext}
+                    value={youtubeUrl}
+                    onChangeText={setYoutubeUrl}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    keyboardType="url"
+                  />
+                  <Pressable
+                    style={[s.primaryBtn, (!youtubeUrl.trim() || step1Loading) && s.primaryBtnDisabled]}
+                    onPress={handleYoutubeAnalyze}
+                    disabled={!youtubeUrl.trim() || step1Loading}
+                  >
+                    {step1Loading
+                      ? <ActivityIndicator color={Colors.bg} />
+                      : <Text style={s.primaryBtnText}>YouTube 분석 시작</Text>
+                    }
+                  </Pressable>
+                  {step1Loading && (
+                    <Text style={s.hintText}>YouTube에서 영상 다운로드 중입니다... (수 분 소요)</Text>
+                  )}
+                </>
               )}
             </View>
           )}
@@ -726,6 +818,23 @@ const s = StyleSheet.create({
   primaryBtnText: { color: Colors.bg, fontWeight: '800', fontSize: 16 },
 
   hintText: { fontSize: 13, color: Colors.subtext, textAlign: 'center' },
+
+  modeToggle: { flexDirection: 'row', gap: 8 },
+  modeBtn: {
+    flex: 1, paddingVertical: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: Colors.border,
+    backgroundColor: Colors.input, alignItems: 'center',
+  },
+  modeBtnActive: { borderColor: Colors.accent, backgroundColor: Colors.accent + '22' },
+  modeBtnText: { fontSize: 13, fontWeight: '600', color: Colors.subtext },
+  modeBtnTextActive: { color: Colors.accent },
+
+  urlInput: {
+    backgroundColor: Colors.input, borderRadius: 12,
+    paddingHorizontal: 16, paddingVertical: 14,
+    color: Colors.text, fontSize: 13,
+    borderWidth: 1, borderColor: Colors.border,
+  },
 
   // Color selection
   colorRow: { flexDirection: 'row', gap: 12, flexWrap: 'wrap' },

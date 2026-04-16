@@ -65,7 +65,7 @@ export const uploadAndAnalyze = async (
   onProgress?: (pct: number) => void,
 ): Promise<{ job_id: string; video_stem?: string; filename?: string }> => {
   const formData = new FormData();
-  formData.append('video', { uri: fileUri, name: fileName, type: 'video/mp4' } as any);
+  formData.append('file', { uri: fileUri, name: fileName, type: 'video/mp4' } as any);
   formData.append('team_name', 'Aigis'); // 기본값
   formData.append('roster_file', 'aigis.json'); // 기본값
 
@@ -75,6 +75,24 @@ export const uploadAndAnalyze = async (
     job_id: res.job_id,
     video_stem: res.video_stem || res.job_id,
     filename: fileName,
+  };
+};
+
+// YouTube URL 분석
+export const analyzeYoutube = async (
+  youtubeUrl: string,
+  options: AnalyzeOptions = {},
+  onProgress?: (pct: number) => void,
+): Promise<{ job_id: string; video_stem: string }> => {
+  const formData = new FormData();
+  formData.append('youtube_url', youtubeUrl);
+  formData.append('team_name', 'Aigis');
+  formData.append('roster_file', 'aigis.json');
+
+  const res = await apiUpload<any>('/api/analyze/youtube', formData, onProgress, TIMEOUTS.upload);
+  return {
+    job_id: res.job_id,
+    video_stem: res.video_stem || res.job_id,
   };
 };
 
