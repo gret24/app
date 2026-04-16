@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { saveRoster, loadRoster } from '../lib/userPlayer';
 
 export type Position = 'LW' | 'RW' | 'C' | 'D' | 'G';
 export type Shoot = 'L' | 'R';
@@ -16,6 +17,7 @@ export interface Player {
 
 interface RosterContextType {
   players: Player[];
+  loaded: boolean;                              // AsyncStorage 로드 완료 여부
   addPlayer: (p: Omit<Player, 'id'>) => void;
   updatePlayer: (id: string, p: Partial<Player>) => void;
   removePlayer: (id: string) => void;
@@ -23,11 +25,22 @@ interface RosterContextType {
 
 const RosterContext = createContext<RosterContextType | null>(null);
 
-// 기본 mock 선수 목록
-const DEFAULT_PLAYERS: Player[] = [];
-
 export function RosterProvider({ children }: { children: React.ReactNode }) {
-  const [players, setPlayers] = useState<Player[]>(DEFAULT_PLAYERS);
+  const [players, setPlayers] = useState<Player[]>([]);
+  const [loaded, setLoaded] = useState(false);
+
+  // 앱 시작 시 AsyncStorage에서 로드
+  useEffect(() => {
+    loadRoster().then(saved => {
+      if (saved.length > 0) setPlayers(saved);
+      setLoaded(true);
+    }).catch(() => setLoaded(true));
+  }, []);
+
+  // 변경될 때마다 AsyncStorage에 저장
+  useEffect(() => {
+    if (loaded) saveRoster(players).catch(() => {});
+  }, [players, loaded]);
 
   const addPlayer = (p: Omit<Player, 'id'>) => {
     setPlayers(prev => [...prev, { ...p, id: Date.now().toString() }]);
@@ -42,7 +55,7 @@ export function RosterProvider({ children }: { children: React.ReactNode }) {
   };
 
   return (
-    <RosterContext.Provider value={{ players, addPlayer, updatePlayer, removePlayer }}>
+    <RosterContext.Provider value={{ players, loaded, addPlayer, updatePlayer, removePlayer }}>
       {children}
     </RosterContext.Provider>
   );
