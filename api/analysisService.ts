@@ -42,6 +42,8 @@ export interface AnalyzeOptions {
   fps?: number;
   home_roster?: string;
   away_roster?: string;
+  team_name?: string;
+  roster_file?: string;
 }
 
 // 경로 기반 분석 (서버에 이미 있는 영상)
@@ -86,8 +88,8 @@ export const analyzeYoutube = async (
 ): Promise<{ job_id: string; video_stem: string }> => {
   const formData = new FormData();
   formData.append('youtube_url', youtubeUrl);
-  formData.append('team_name', 'Aigis');
-  formData.append('roster_file', 'aigis.json');
+  formData.append('team_name', options.team_name ?? 'Aigis');
+  formData.append('roster_file', options.roster_file ?? 'aigis.json');
 
   const res = await apiUpload<any>('/api/analyze/youtube', formData, onProgress, TIMEOUTS.upload);
   return {
